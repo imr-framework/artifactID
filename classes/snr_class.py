@@ -19,11 +19,11 @@ class SNRObj(SliceObj):
 
         obj_mask = np.zeros_like(self.data)
         obj_mask[obj_idx] = 1
-        self.obj_mask = obj_mask
+        self.obj_mask = obj_mask.astype(np.int8)
 
         noise_mask = np.ones_like(self.data)
         noise_mask[obj_idx] = 0
-        self.noise_mask = noise_mask
+        self.noise_mask = noise_mask.astype(np.int8)
 
     def add_real_noise(self):
         data = self.data + np.random.normal(loc=0, scale=0.001, size=self.data.shape)
@@ -38,7 +38,7 @@ class SNRObj(SliceObj):
         if target_snr_db:
             object = np.extract(arr=self.data, condition=self.obj_mask)
             awgn_std = object.mean() / math.pow(10, target_snr_db / 20)
-        noise = np.random.normal(loc=0, scale=awgn_std, size=int(self.noise_mask.sum()))
+        noise = np.random.normal(loc=0, scale=awgn_std, size=int(self.noise_mask.sum())).astype(np.float16)
         data_noisy = np.copy(self.data)
         np.place(arr=data_noisy, mask=self.noise_mask, vals=noise)
         return SNRObj(data_noisy, self.obj_mask, self.noise_mask)
