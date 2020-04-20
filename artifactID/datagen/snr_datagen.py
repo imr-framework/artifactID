@@ -3,7 +3,8 @@ from pathlib import Path
 import nibabel as nb
 import numpy as np
 
-from classes.snr_class import SNRObj
+from artifactID.common.classes import SNRObj
+from artifactID.common.utils import glob_brats_t1
 
 
 def _load_vol(path: str):
@@ -33,55 +34,52 @@ def _load_vol(path: str):
     return arr_sliobj
 
 
-if __name__ == '__main__':
-    # First make the save destination folders: real noise, object mask and each SNR
-    path_save_real = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\real_noise")
-    path_save_obj_mask = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\mask")
-    for p in [path_save_real, path_save_obj_mask]:
-        if not p.exists():
-            p.mkdir(parents=True)
-    snr_range = [2, 5, 11, 15, 20]
-    for snr in snr_range:
-        path_save_snr = Path(
-            r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\snr{}".format(snr))
-        if not path_save_snr.exists():
-            path_save_snr.mkdir(parents=True)
-    path_save_snr = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\snr")
+def main(path_brats: str, path_save: str):
+    arr_snr_range = [2, 5, 11, 15, 20]
 
     # BraTS 2018 paths
-    path_read_brats = r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\DART\Data\MICCAI_BraTS_2018_Data_Training"
-    path_read_brats = Path(path_read_brats)
-    arr_brats_paths = list(path_read_brats.glob('**/*.nii.gz'))
-    arr_brats_paths = list(filter(lambda x: 't1.nii' in str(x), arr_brats_paths))
-    num_subjects = len(arr_brats_paths)
+    arr_path_brats_t1 = glob_brats_t1(path_brats=path_brats)
+    num_subjects = len(arr_path_brats_t1)
 
-    for i, p in enumerate(arr_brats_paths):
-        pc = round((i + 1) / num_subjects * 100, ndigits=2)
+    subjects_per_class = len(arr_path_brats_t1) // len(arr_snr_range)  # Calculate number of subjects per class
+    arr_snr_range = arr_snr_range * subjects_per_class
+    np.random.shuffle(arr_snr_range)
+
+    path_save = Path(path_save)
+    path_all = [path_save / "mask", *[path_save / f'snr{snr}' for snr in arr_snr_range]]
+    # Make save folders if they do not exist
+    for p in path_all:
+        if not p.exists():
+            p.mkdir(parents=True)
+
+    # =========
+    # DATAGEN
+    # =========
+    for ind, path_t1 in enumerate(arr_path_brats_t1):
+        subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
+
+        pc = round((ind + 1) / num_subjects * 100, ndigits=2)
         print(f'{pc}%', end=', ', flush=True)
 
         # Ideal noise
-        arr_brats_ideal_sliobj = _load_vol(p)
-        arr_obj_masks = [x.obj_mask for x in arr_brats_ideal_sliobj]  # Object mask
-        arr_obj_masks = np.stack(arr_obj_masks)
-        np.moveaxis(arr_obj_masks, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
-        path_save = path_save_obj_mask / (p.parts[-1].split('.')[0] + '.npy')
-        np.save(arr=arr_obj_masks, file=path_save)  # Save to disk
+        arr_ideal_noise_sliobj = _load_vol(path_t1)  # Array of slice objects
 
-        # Real noise
-        arr_brats_real_sliobj = [sliobj.add_real_noise() for sliobj in
-                                 arr_brats_ideal_sliobj]  # Add real noise (0.001 STD AWGN)
-        arr_brats_real = [x.data for x in arr_brats_real_sliobj]
-        arr_brats_real = np.stack(arr_brats_real)
-        np.moveaxis(arr_brats_real, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
-        path_save = path_save_real / (p.parts[-1].split('.')[0] + '.npy')
-        np.save(arr=arr_brats_real, file=path_save)  # Save to disk
+        # Brain masks
+        arr_masks = [x.obj_mask for x in arr_ideal_noise_sliobj]  # Array of slice masks
+        arr_masks = np.stack(arr_masks)  # Convert from list to numpy.ndarray
+        np.moveaxis(arr_masks, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
+        _path_save = str(path_save / 'mask' / subject_name) + '.npy'
+        np.save(arr=arr_masks, file=_path_save)  # Save to disk
+
+        # Add real noise (0.001 STD AWGN)
+        arr_real_noise_sliobj = [sliobj.add_real_noise() for sliobj in arr_ideal_noise_sliobj]  # Array of slice objects
 
         # SNR
-        for snr in snr_range:
-            arr_brats_snr_sliobj = [sliobj.add_awgn(target_snr_db=snr) for sliobj in
-                                    arr_brats_real_sliobj]  # Corrupt to `snr` dB
-            arr_brats_snr = [x.data for x in arr_brats_snr_sliobj]
-            arr_brats_snr = np.stack(arr_brats_snr)
-            np.moveaxis(arr_brats_snr, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
-            path_save = Path(str(path_save_snr) + str(snr)) / (p.parts[-1].split('.')[0] + '.npy')
-            np.save(arr=arr_brats_snr, file=path_save)  # Save to disk
+        snr = arr_snr_range[ind]
+        arr_snr_sliobj = [sliobj.add_awgn(target_snr_db=snr) for sliobj in
+                          arr_real_noise_sliobj]  # Corrupt to `snr` dB
+        arr_snr = [x.data for x in arr_snr_sliobj]
+        arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
+        np.moveaxis(arr_snr, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
+        _path_save = str(path_save / f'snr{snr}' / subject_name) + '.npy'
+        np.save(arr=arr_snr, file=_path_save)  # Save to disk

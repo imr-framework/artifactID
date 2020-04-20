@@ -2,7 +2,10 @@ import math
 
 import numpy as np
 
-from classes.slice_class import SliceObj
+
+class SliceObj:
+    def __init__(self, arr):
+        self.data = arr.astype(np.float16)
 
 
 class SNRObj(SliceObj):
