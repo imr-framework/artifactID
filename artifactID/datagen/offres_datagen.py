@@ -106,7 +106,8 @@ def main(path_brats: str, path_save: str, path_ktraj: str, path_dcf: str):
 
     arr_max_freq = [250, 500, 750]  # Hz
     subjects_per_class = int(len(arr_path_brats_t1) / len(arr_max_freq))  # Calculate number of subjects per class
-    np.random.shuffle(arr_max_freq * subjects_per_class)
+    arr_max_freq *= subjects_per_class
+    np.random.shuffle(arr_max_freq)
 
     path_save = Path(path_save)
     path_all = [path_save / f'b0_{freq}' for freq in arr_max_freq]
