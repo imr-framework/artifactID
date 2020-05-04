@@ -1,13 +1,13 @@
+import math
 from pathlib import Path
 
-import nibabel as nb
 import numpy as np
 
-from artifactID.common.classes import SNRObj
-from artifactID.common.utils import glob_brats_t1
+from artifactID.utils import glob_brats_t1, load_vol
+from artifactID.datagen.snr_class import SNRObj
 
 
-def _load_vol(path: str):
+def _load_vol_as_snrobj(path: str):
     """
     Read NIFTI file at `path` and return an array of SNRObj. Each SNRObj is a slice from the NIFTI file. Only slices
     having 5% or more signal are considered.
@@ -22,14 +22,11 @@ def _load_vol(path: str):
         Array of individual slices in NIFTI file at `path`. Each slice is represented as an instance of
         class SNRObj.
     """
-    vol = nb.load(path).get_fdata()
-    vol = np.rot90(vol, -1, axes=(0, 1))
-    vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
+    vol = load_vol(path)
     arr_sliobj = []
     for i in range(vol.shape[2]):
         sli = vol[:, :, i]
-        if np.count_nonzero(sli) > 0.05 * sli.size:  # Check if at least 5% of signal is present
-            arr_sliobj.append(SNRObj(sli))
+        arr_sliobj.append(SNRObj(sli))
 
     return arr_sliobj
 
@@ -37,11 +34,14 @@ def _load_vol(path: str):
 def main(path_brats: str, path_save: str):
     arr_snr_range = [2, 5, 11, 15, 20]
 
-    # BraTS 2018 paths
+    # =========
+    # BRATS PATHS
+    # =========
     arr_path_brats_t1 = glob_brats_t1(path_brats=path_brats)
     num_subjects = len(arr_path_brats_t1)
 
-    subjects_per_class = len(arr_path_brats_t1) // len(arr_snr_range)  # Calculate number of subjects per class
+    subjects_per_class = math.ceil(
+        len(arr_path_brats_t1) / len(arr_snr_range))  # Calculate number of subjects per class
     arr_snr_range = arr_snr_range * subjects_per_class
     np.random.shuffle(arr_snr_range)
 
@@ -62,7 +62,7 @@ def main(path_brats: str, path_save: str):
         print(f'{pc}%', end=', ', flush=True)
 
         # Ideal noise
-        arr_ideal_noise_sliobj = _load_vol(path_t1)  # Array of slice objects
+        arr_ideal_noise_sliobj = _load_vol_as_snrobj(path_t1)  # Array of slice objects
 
         # Brain masks
         arr_masks = [x.obj_mask for x in arr_ideal_noise_sliobj]  # Array of slice masks

@@ -1,5 +1,4 @@
 import math
-from concurrent.futures import as_completed, ProcessPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -7,7 +6,7 @@ import nibabel as nib
 import numpy as np
 import scipy.io as sio
 
-from artifactID.common.utils import glob_brats_t1
+from artifactID.utils import glob_brats_t1
 from artifactID.datagen import generate_fieldmap
 from orc import ORC
 
@@ -32,16 +31,17 @@ def _preprocess_imvol(vol):
     return vol_pp
 
 
-def _threaded_gen_fieldmap(_i, _slice, _freq_range, _traj, _seq_params):
+def _gen_fieldmap(_slice, _freq_range, _ktraj, _seq_params):
     field_map, mask = generate_fieldmap.gen_smooth_b0(_slice, _freq_range)  # Simulate the field map
-    or_corrupted, _ = ORC.add_or_CPR(_slice, _traj, field_map, nonCart=1, params=_seq_params)  # Corrupt the image
+    or_corrupted, _ = ORC.add_or_CPR(_slice, _ktraj, field_map, nonCart=1,
+                                     params=_seq_params)  # Corrupt the image
     or_corrupted_norm = np.zeros(or_corrupted.shape)
     or_corrupted_norm = cv2.normalize(np.abs(or_corrupted), or_corrupted_norm, 0, 1,
                                       cv2.NORM_MINMAX)  # Normalize [0, 1]
-    return _i, np.float32(or_corrupted_norm * mask)
+    return np.float32(or_corrupted_norm * mask)
 
 
-def multiprocess_orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.ndarray, seq_params: dict):
+def orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.ndarray, seq_params: dict):
     """
     Adds off-resonance blurring to simulate B0 inhomogeneity artifacts.
 
@@ -64,22 +64,13 @@ def multiprocess_orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.nd
 
     seq_params['N'] = vol.shape[0]
     num_slices = vol.shape[2]
-    futures = []
-
-    with ProcessPoolExecutor() as executor:
-        for ind in range(num_slices):
-            slice = vol[:, :, ind]
-            if np.count_nonzero(slice) > 0.05 * slice.size:  # Check if at least 5% of signal is present
-                futures.append(executor.submit(_threaded_gen_fieldmap, ind, slice, freq_range, ktraj, seq_params))
-
-        dict_offres_vol = dict()
-        for ind, f in enumerate(as_completed(futures)):
-            result = f.result()
-            dict_offres_vol[result[0]] = result[1]
-
     arr_offres_vol = []
-    for key in sorted(dict_offres_vol.keys()):
-        arr_offres_vol.append(dict_offres_vol[key])
+
+    for ind in range(num_slices):
+        slice = vol[:, :, ind]
+        if np.count_nonzero(slice) > 0.05 * slice.size:  # Check if at least 5% of signal is present
+            res = _gen_fieldmap(_slice=slice, _freq_range=freq_range, _ktraj=ktraj, _seq_params=seq_params)
+            arr_offres_vol.append(res)
     arr_offres_vol = np.stack(arr_offres_vol)
     return arr_offres_vol
 
@@ -105,7 +96,7 @@ def main(path_brats: str, path_save: str, path_ktraj: str, path_dcf: str):
     num_subjects = len(arr_path_brats_t1)
 
     arr_max_freq = [250, 500, 750]  # Hz
-    subjects_per_class = int(len(arr_path_brats_t1) / len(arr_max_freq))  # Calculate number of subjects per class
+    subjects_per_class = math.ceil(len(arr_path_brats_t1) / len(arr_max_freq))  # Calculate number of subjects per class
     arr_max_freq *= subjects_per_class
     np.random.shuffle(arr_max_freq)
 
@@ -126,7 +117,7 @@ def main(path_brats: str, path_save: str, path_ktraj: str, path_dcf: str):
         vol = nib.load(path_t1).get_data()
         vol_pp = _preprocess_imvol(vol=vol)
         freq = arr_max_freq[ind]
-        vol_b0 = multiprocess_orc_forwardmodel(vol=vol_pp, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
+        vol_b0 = orc_forwardmodel(vol=vol_pp, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
         vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
 
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
