@@ -3,14 +3,9 @@ import math
 import numpy as np
 
 
-class SliceObj:
-    def __init__(self, arr):
-        self.data = arr.astype(np.float16)
-
-
-class SNRObj(SliceObj):
+class SNRObj:
     def __init__(self, arr, obj_mask=None, noise_mask=None):
-        super().__init__(arr)
+        self.data = arr.astype(np.float16)
         if obj_mask is None or noise_mask is None:
             self._make_masks()
         else:
