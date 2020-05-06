@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import nibabel as nb
@@ -11,9 +12,13 @@ def glob_brats_t1(path_brats: str):
     return arr_paths_brats_t1
 
 
-def load_vol(path: str):
+def load_nifti_vol(path: str):
     """
-    Read NIFTI file at `path` and return an 3D numpy.ndarray. Only slices having 5% or more signal are considered.
+    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal, and zero-pad
+    the rest.
+
+    1. Ensure correct orientation of the brain
+    2. Normalize between 0-1
 
     Parameters
     ==========
@@ -26,10 +31,14 @@ def load_vol(path: str):
         3D array of NIFTI file at `path`.
     """
     vol = nb.load(path).get_fdata()
-    vol = np.rot90(vol, -1, axes=(0, 1))
+    vol = np.rot90(vol, -1, axes=(0, 1))  # Ensure correct orientation
+    orig_num_slices = vol.shape[2]
     slice_content = lambda x: np.count_nonzero(x) > 0.05 * x.size
     slice_content_idx = [slice_content(vol[:, :, i]) for i in
                          range(vol.shape[2])]  # Get indices of slices with >=5% signal
     vol = vol[:, :, slice_content_idx]
+    n_zeros = (orig_num_slices - vol.shape[2]) / 2
+    n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
+    vol = np.pad(vol, [[0, 0], [0, 0], n_zeros])
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol

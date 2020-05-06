@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from artifactID.utils import glob_brats_t1, load_vol
+from artifactID.utils import glob_brats_t1, load_nifti_vol
 from artifactID.datagen.snr_class import SNRObj
 
 
@@ -22,7 +22,7 @@ def _load_vol_as_snrobj(path: str):
         Array of individual slices in NIFTI file at `path`. Each slice is represented as an instance of
         class SNRObj.
     """
-    vol = load_vol(path)
+    vol = load_nifti_vol(path)
     arr_sliobj = []
     for i in range(vol.shape[2]):
         sli = vol[:, :, i]

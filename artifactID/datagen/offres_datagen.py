@@ -2,33 +2,13 @@ import math
 from pathlib import Path
 
 import cv2
-import nibabel as nib
 import numpy as np
 import scipy.io as sio
 
-from artifactID.utils import glob_brats_t1
 from artifactID.datagen import generate_fieldmap
+from artifactID.utils import glob_brats_t1
+from artifactID.utils import load_nifti_vol
 from orc import ORC
-
-
-def _preprocess_imvol(vol):
-    """
-    Preprocesses (Rotates and normalizes) a 3D image volume
-
-    Parameters
-    ==========
-    vol : numpy.ndarray
-        Image volume having dimensions N x N x N number of slices
-
-    Returns
-    =======
-    vol_pp : numpy.ndarray
-        Image volume after preprocessing N x N x N number of slices intensity range [0, 1]
-    """
-    vol = np.rot90(vol, -1, axes=(0, 1))  # Rotation
-    vol_pp = (vol - vol.min()) / (vol.max() - vol.min())  # Normalization [0, 1]
-
-    return vol_pp
 
 
 def _gen_fieldmap(_slice, _freq_range, _ktraj, _seq_params):
@@ -114,10 +94,9 @@ def main(path_brats: str, path_save: str, path_ktraj: str, path_dcf: str):
         pc = round((ind + 1) / num_subjects * 100, ndigits=2)
         print(f'{pc}%', end=', ', flush=True)
 
-        vol = nib.load(path_t1).get_data()
-        vol_pp = _preprocess_imvol(vol=vol)
+        vol = load_nifti_vol(path=path_t1)
         freq = arr_max_freq[ind]
-        vol_b0 = orc_forwardmodel(vol=vol_pp, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
+        vol_b0 = orc_forwardmodel(vol=vol, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
         vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
 
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from artifactID.utils import glob_brats_t1, load_vol
+from artifactID.utils import glob_brats_t1, load_nifti_vol
 
 
 def main(path_brats: str, path_save: str):
@@ -36,7 +36,7 @@ def main(path_brats: str, path_save: str):
         pc = round((ind + 1) / num_subjects * 100, ndigits=2)
         print(f'{pc}%', end=', ', flush=True)
 
-        vol = load_vol(path_t1)
+        vol = load_nifti_vol(path_t1)
         wrap_ex = arr_wrap_range[ind]
         opacity = 0.5
         top, middle, bottom = vol[:wrap_ex], vol[wrap_ex:-wrap_ex], vol[-wrap_ex:]
