@@ -21,7 +21,7 @@ print('Ghosting datagen...')
 fov_wrap_datagen.main(path_brats=path_brats, path_save=path_save)
 
 # Off-resonance datagen
-print('Off-resonance datagen...')
+print('\nOff-resonance datagen...')
 offres_datagen.main(path_brats=path_brats, path_save=path_save, path_ktraj=path_ktraj, path_dcf=path_dcf)
 
 # SNR datagen

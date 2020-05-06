@@ -30,8 +30,6 @@ def main(path_brats: str, path_save: str):
     # =========
     # DATAGEN
     # =========
-    all_slices = []
-    all_labels = []
     for ind, path_t1 in enumerate(arr_path_brats_t1):
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
 
@@ -46,8 +44,6 @@ def main(path_brats: str, path_save: str):
         middle[-wrap_ex:] += top * opacity
         middle = np.pad(middle, [[wrap_ex, wrap_ex], [0, 0], [0, 0]])
         middle = middle.astype(np.float16)
-        all_slices.extend(middle)
-        all_labels.extend([wrap_ex] * len(middle))
 
         _path_save = str(path_save / f'wrap{wrap_ex}' / subject_name) + '.npy'
         np.save(arr=middle, file=_path_save)  # Save to disk

@@ -80,6 +80,6 @@ def main(path_brats: str, path_save: str):
                           arr_real_noise_sliobj]  # Corrupt to `snr` dB
         arr_snr = [x.data for x in arr_snr_sliobj]
         arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
-        np.moveaxis(arr_snr, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
+        arr_snr = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
         _path_save = str(path_save / f'snr{snr}' / subject_name) + '.npy'
         np.save(arr=arr_snr, file=_path_save)  # Save to disk

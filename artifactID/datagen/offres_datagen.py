@@ -118,7 +118,7 @@ def main(path_brats: str, path_save: str, path_ktraj: str, path_dcf: str):
         vol_pp = _preprocess_imvol(vol=vol)
         freq = arr_max_freq[ind]
         vol_b0 = orc_forwardmodel(vol=vol_pp, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
-        vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [1, 2, 0])  # Iterate through slices on the last dim
+        vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
 
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
         _path_save = str(path_save / f'b0_{freq}' / subject_name) + '.npy'
