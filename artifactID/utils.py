@@ -14,8 +14,7 @@ def glob_brats_t1(path_brats: str):
 
 def load_nifti_vol(path: str):
     """
-    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal, and zero-pad
-    the rest.
+    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal.
 
     1. Ensure correct orientation of the brain
     2. Normalize between 0-1
@@ -32,13 +31,9 @@ def load_nifti_vol(path: str):
     """
     vol = nb.load(path).get_fdata()
     vol = np.rot90(vol, -1, axes=(0, 1))  # Ensure correct orientation
-    orig_num_slices = vol.shape[2]
     slice_content = lambda x: np.count_nonzero(x) > 0.05 * x.size
     slice_content_idx = [slice_content(vol[:, :, i]) for i in
                          range(vol.shape[2])]  # Get indices of slices with >=5% signal
     vol = vol[:, :, slice_content_idx]
-    n_zeros = (orig_num_slices - vol.shape[2]) / 2
-    n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
-    vol = np.pad(vol, [[0, 0], [0, 0], n_zeros])
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol

@@ -43,6 +43,12 @@ def main(path_brats: str, path_save: str):
         middle[:wrap_ex] += bottom * opacity
         middle[-wrap_ex:] += top * opacity
         middle = np.pad(middle, [[wrap_ex, wrap_ex], [0, 0], [0, 0]])
+
+        # Zero pad back to 155
+        orig_num_slices = 155
+        n_zeros = (orig_num_slices - middle.shape[2]) / 2
+        n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
+        middle = np.pad(middle, [[0, 0], [0, 0], n_zeros])
         middle = middle.astype(np.float16)
 
         _path_save = str(path_save / f'wrap{wrap_ex}' / subject_name) + '.npy'

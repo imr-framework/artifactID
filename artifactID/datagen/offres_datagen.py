@@ -99,6 +99,12 @@ def main(path_brats: str, path_save: str, path_ktraj: str, path_dcf: str):
         vol_b0 = orc_forwardmodel(vol=vol, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
         vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
 
+        # Zero pad back to 155
+        orig_num_slices = 155
+        n_zeros = (orig_num_slices - vol_b0.shape[2]) / 2
+        n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
+        vol_b0 = np.pad(vol_b0, [[0, 0], [0, 0], n_zeros])
+
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
         _path_save = str(path_save / f'b0_{freq}' / subject_name) + '.npy'
         np.save(arr=vol_b0, file=_path_save)
