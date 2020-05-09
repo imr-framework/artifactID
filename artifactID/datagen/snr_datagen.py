@@ -104,7 +104,7 @@ def main(path_brats: str, path_save: str):
         pc = round((ind + 1) / num_subjects * 100, ndigits=2)
         print(f'{pc}%', end=', ', flush=True)
 
-        # Ideal noise
+        # Load from disk, comes with ideal (0) noise outside brain
         arr_ideal_noise_sliobj = _load_vol_as_snrobj(path_t1)  # Array of slice objects
 
         # Brain masks
@@ -129,6 +129,7 @@ def main(path_brats: str, path_save: str):
         arr_snr = [x.data for x in arr_snr_sliobj]
         arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
         arr_snr = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        arr_snr[np.where(arr_snr < 0)] = 0
         # Zero pad back to 155
         orig_num_slices = 155
         n_zeros = (orig_num_slices - arr_snr.shape[2]) / 2
