@@ -43,12 +43,15 @@ def convert_miccai_npy():
         s = s.name
         s = s.replace('nii.gz', 'npy')
         dst = common_data / 'noartifact' / s
+        # Normalize volume to [0,1]
+        max = vol.max()
+        min = vol.min()
+        vol = (vol - min) / (max - min)
         np.save(str(dst), vol)
 
 
-def random_check_data():
-    # Randomly check a few subjects
-    # Check to see if zero-padding was done right on 10 random subjects
+def shape_check():
+    # Randomly check a few subjects to see if zero-padding was done right on 10 random subjects
     random_files = list(Path('data').glob('**/*.npy'))
     random_files = np.random.choice(random_files, size=10)
     random_files = [np.load(str(rf)) for rf in random_files]
@@ -57,4 +60,31 @@ def random_check_data():
     print(f'10 randomly sampled shapes are matching: {shapes_match}')
 
 
-convert_miccai_npy()
+def min_max_check():
+    data_root = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\data")
+    all_max = dict()
+    all_min = dict()
+
+    folders = list(data_root.glob('wrap*'))
+    for folder in tqdm(folders):
+        files = list(folder.glob('*.npy'))
+        for f in files:
+            vol = np.load(f)
+            key = f.parts[-2] + '/' + f.parts[-1]
+            all_max[key] = vol.max()
+            all_min[key] = vol.min()
+
+    max = np.all(np.array(list(all_max.values())) == 1)
+    if not max:
+        idx = np.where(np.array(list(all_max.values())) != 1)
+        print(np.array(list(all_max.keys()))[idx[:10]])
+    min = np.all(np.array(list(all_min.values())) == 0)
+    if not min:
+        idx = np.where(np.array(list(all_min.values())) != 0)
+        print(np.array(list(all_min.keys()))[idx[:10]])
+    print(f'Max: {max}')
+    print(f'Min: {min}')
+
+
+# convert_miccai_npy()
+# min_max_check()

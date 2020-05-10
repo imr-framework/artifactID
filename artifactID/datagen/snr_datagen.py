@@ -129,7 +129,10 @@ def main(path_brats: str, path_save: str):
         arr_snr = [x.data for x in arr_snr_sliobj]
         arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
         arr_snr = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
-        arr_snr[np.where(arr_snr < 0)] = 0
+        # Normalize to [0, 1]
+        _max = arr_snr.max()
+        _min = arr_snr.min()
+        arr_snr = (arr_snr - _min) / (_max - _min)
         # Zero pad back to 155
         orig_num_slices = 155
         n_zeros = (orig_num_slices - arr_snr.shape[2]) / 2

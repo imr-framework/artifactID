@@ -22,7 +22,8 @@ data_root = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\Artifa
 for artifact_folder in data_root.glob('*'):
     files = list(artifact_folder.glob('*.npy'))
     x_paths.extend(files)
-    y_labels.extend([str(artifact_folder.name)] * len(files))
+    label = artifact_folder.name.rstrip('0123456789')
+    y_labels.extend([label] * len(files))
 
 # Shuffle
 x_paths, y_labels = _shuffle(x=x_paths, y=y_labels)
@@ -49,8 +50,8 @@ for p in tqdm(x_paths_eval):
     x_eval.append(np.load(p))
 x_eval = np.stack(x_eval).astype(np.float16)
 x_eval = np.expand_dims(x_eval, axis=-1)
-y_eval = [dict_labels_encoded[y] for y in y_labels_eval]
-y_eval = np.expand_dims(y_eval, axis=-1)
+# y_eval = [dict_labels_encoded[y] for y in y_labels_eval]
+# y_eval = np.expand_dims(y_eval, axis=-1)
 
 # Prevent crash
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -58,9 +59,10 @@ tf.config.experimental.set_memory_growth(gpus[0], True)
 
 print('Loading model...')
 model = load_model('artifactID_model.hdf5')
-print('Evaluting model...')
+print('Evaluating model...')
 y_pred = []
 for eval in tqdm(x_eval):
     eval = np.expand_dims(eval, axis=0)
     y_pred.append(np.argmax(model.predict(x=eval)))
 print(y_pred)
+print(dict_labels_encoded)

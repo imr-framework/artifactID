@@ -43,6 +43,10 @@ def main(path_brats: str, path_save: str):
         middle[:wrap_ex] += bottom * opacity
         middle[-wrap_ex:] += top * opacity
         middle = np.pad(middle, [[wrap_ex, wrap_ex], [0, 0], [0, 0]])
+        # Normalize to [0, 1]
+        _max = middle.max()
+        _min = middle.min()
+        middle = (middle - _min) / (_max - _min)
 
         # Zero pad back to 155
         orig_num_slices = 155
