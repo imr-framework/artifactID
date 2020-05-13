@@ -6,8 +6,8 @@ import numpy as np
 import scipy.io as sio
 
 from artifactID.datagen import generate_fieldmap
-from artifactID.utils import glob_brats_t1
-from artifactID.utils import load_nifti_vol
+from artifactID.data_utils import glob_brats_t1
+from artifactID.data_utils import load_nifti_vol
 from orc import ORC
 
 

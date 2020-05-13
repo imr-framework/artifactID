@@ -12,18 +12,18 @@ config = configparser.ConfigParser()
 config.read(path_settings)
 config_data = config['DATA']
 path_read_brats = config_data['path_read_brats']
-path_datagen_save = config_data['path_datagen_save']
+path_save_datagen = config_data['path_save_datagen']
 path_ktraj = config_data['path_ktraj']
 path_dcf = config_data['path_dcf']
 
 # Ghosting datagen
 print('FOV wrap-around datagen...')
-fov_wrap_datagen.main(path_brats=path_read_brats, path_save=path_datagen_save)
+fov_wrap_datagen.main(path_brats=path_read_brats, path_save=path_save_datagen)
 
-# Off-resonance datagen
+# # Off-resonance datagen
 print('\nOff-resonance datagen...')
-offres_datagen.main(path_brats=path_brats, path_save=path_save, path_ktraj=path_ktraj, path_dcf=path_dcf)
+offres_datagen.main(path_brats=path_read_brats, path_save=path_save_datagen, path_ktraj=path_ktraj, path_dcf=path_dcf)
 
 # SNR datagen
 print('\nSNR datagen...')
-snr_datagen.main(path_brats=path_read_brats, path_save=path_datagen_save)
+snr_datagen.main(path_brats=path_read_brats, path_save=path_save_datagen)
