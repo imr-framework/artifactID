@@ -15,9 +15,8 @@ def _download_if_missing(url, unzip_src):
         print(f'{unzip_src} already present, skipping download...')
 
 
-def download_from_storage_bucket():
+def download_from_storage_bucket(data_root):
     """Download data from Google storage bucket"""
-    data_root = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data")
     folders = ['noartifact', 'snr', 'b0_inhomogeneity', 'wraparound']
     for f in tqdm(folders):
         filename = f + '_data.zip'
@@ -50,9 +49,9 @@ def convert_miccai_npy():
         np.save(str(dst), vol)
 
 
-def shape_check():
+def shape_check(data_root):
     # Randomly check a few subjects to see if zero-padding was done right on 10 random subjects
-    random_files = list(Path('data').glob('**/*.npy'))
+    random_files = list(data_root.glob('**/*.npy'))
     random_files = np.random.choice(random_files, size=10)
     random_files = [np.load(str(rf)) for rf in random_files]
     required_shape = (240, 240, 155)
@@ -60,31 +59,14 @@ def shape_check():
     print(f'10 randomly sampled shapes are matching: {shapes_match}')
 
 
-def min_max_check():
-    data_root = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\data")
-    all_max = dict()
-    all_min = dict()
-
-    folders = list(data_root.glob('wrap*'))
-    for folder in tqdm(folders):
+def min_max_check(data_root):
+    for folder in data_root.glob('*'):
+        print(f'Checking {folder.name}...')
         files = list(folder.glob('*.npy'))
-        for f in files:
+        for f in tqdm(files):
             vol = np.load(f)
             key = f.parts[-2] + '/' + f.parts[-1]
-            all_max[key] = vol.max()
-            all_min[key] = vol.min()
-
-    max = np.all(np.array(list(all_max.values())) == 1)
-    if not max:
-        idx = np.where(np.array(list(all_max.values())) != 1)
-        print(np.array(list(all_max.keys()))[idx[:10]])
-    min = np.all(np.array(list(all_min.values())) == 0)
-    if not min:
-        idx = np.where(np.array(list(all_min.values())) != 0)
-        print(np.array(list(all_min.keys()))[idx[:10]])
-    print(f'Max: {max}')
-    print(f'Min: {min}')
-
-
-# convert_miccai_npy()
-# min_max_check()
+            if vol.max() != 1:
+                print(key)
+            if vol.min() != 0:
+                print(key)

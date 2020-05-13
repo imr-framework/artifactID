@@ -1,4 +1,4 @@
-import math
+import itertools
 from pathlib import Path
 
 import nibabel as nb
@@ -37,3 +37,35 @@ def load_nifti_vol(path: str):
     vol = vol[:, :, slice_content_idx]
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
+
+
+def shuffle_dataset(x, y):
+    assert len(x) == len(y)
+    random_idx = np.random.randint(len(x), size=len(x))
+    x = np.take(x, random_idx)
+    y = np.take(y, random_idx)
+    return x, y
+
+
+def data_generator(x_paths, y_labels, mode):
+    y_labels = y_labels.astype(np.str)  # Convert from byte string to string
+
+    # Construct dictionary to encode labels as integers
+    unique_labels = np.unique(y_labels)
+    dict_labels_encoded = dict(zip(unique_labels, itertools.count(0)))
+
+    while True:
+        for counter in range(len(x_paths)):
+            x = np.load(x_paths[counter])  # Load volume
+            x = np.expand_dims(x, axis=3).astype(np.float16)  # Convert shape to (240, 240, 155, 1), mixed precision
+
+            label = y_labels[counter]  # Get label
+            y = np.array([dict_labels_encoded[label]]).astype(np.int8)  # Encoded label
+
+            yield x, y
+        if mode == 'train':
+            x_paths, y_labels = shuffle_dataset(x=x_paths, y=y_labels)  # Shuffle after each epoch
+        elif mode == 'eval':
+            break
+        else:
+            raise ValueError('Unknown mode')
