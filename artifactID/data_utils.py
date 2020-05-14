@@ -48,7 +48,10 @@ def shuffle_dataset(x, y):
 
 
 def data_generator(x_paths, y_labels, mode):
-    y_labels = y_labels.astype(np.str)  # Convert from byte string to string
+    # Convert from byte string to string
+    x_paths = x_paths.astype(np.str)
+    y_labels = y_labels.astype(np.str)
+    mode = mode.decode('utf-8')
 
     # Construct dictionary to encode labels as integers
     unique_labels = np.unique(y_labels)
@@ -64,8 +67,9 @@ def data_generator(x_paths, y_labels, mode):
 
             yield x, y
         if mode == 'train':
-            x_paths, y_labels = shuffle_dataset(x=x_paths, y=y_labels)  # Shuffle after each epoch
+            # Shuffle after each epoch during training/validation
+            x_paths, y_labels = shuffle_dataset(x=x_paths, y=y_labels)
         elif mode == 'eval':
             break
         else:
-            raise ValueError('Unknown mode')
+            raise ValueError(f'Unknown mode. Valid values are train and eval, you passed: {mode}')

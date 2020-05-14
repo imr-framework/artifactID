@@ -63,7 +63,7 @@ def main(data_root: str, model_load_path: str):
 
 if __name__ == '__main__':
     # Read settings.ini configuration file
-    path_settings = r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Code\artifactID\settings.ini"
+    path_settings = 'settings.ini'
     config = configparser.ConfigParser()
     config.read(path_settings)
 

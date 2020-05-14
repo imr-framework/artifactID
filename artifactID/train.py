@@ -1,6 +1,9 @@
 import configparser
 import math
+from datetime import datetime
 from pathlib import Path
+from time import time
+from warnings import warn
 
 import numpy as np
 import tensorflow as tf
@@ -22,17 +25,25 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-# =========
-
-def main(data_root: str, model_save_path: str):
+def main(data_root: str, model_save_path: str, filter_artifact: str):
     # Construct `x` and `y` training pairs
     x_paths = []
     y_labels = []
-    for artifact_folder in Path(data_root).glob('*'):
+    if filter_artifact in ['b0', 'snr', 'wrap']:
+        pattern = filter_artifact + '*'
+    else:
+        warning = f'Unknown value for filter_artifact. Valid values are b0, snr and wrap. ' \
+                  f'You passed: {filter_artifact}. Training to classify all artifacts.'
+        warn(warning)
+        pattern = '*'
+
+    for artifact_folder in Path(data_root).glob(pattern):
         files = list(artifact_folder.glob('*.npy'))
         files = list(map(lambda x: str(x), files))  # Convert from Path to str
         x_paths.extend(files)
-        label = artifact_folder.name.rstrip('0123456789')
+        label = artifact_folder.name
+        if pattern == '*':
+            label = label.rstrip('0123456789')
         y_labels.extend([label] * len(files))
 
     # Shuffle
@@ -60,6 +71,7 @@ def main(data_root: str, model_save_path: str):
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     batch_size = 1
+    plateau_callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=1)
     train_steps_per_epoch = math.ceil(len(x_paths_train) / batch_size)
     val_steps_per_epoch = math.ceil(len(x_paths_val) / batch_size)
     train_generator = tf.data.Dataset.from_generator(generator=data_generator,
@@ -72,21 +84,46 @@ def main(data_root: str, model_save_path: str):
                                                    output_types=(tf.float16, tf.int8),
                                                    output_shapes=(tf.TensorShape([240, 240, 155, 1]),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
-    model.fit(x=train_generator, steps_per_epoch=train_steps_per_epoch,
-              validation_data=val_generator, validation_steps=val_steps_per_epoch)
+    start = time()
+    results = model.fit(x=train_generator, steps_per_epoch=train_steps_per_epoch, epochs=5,
+                        validation_data=val_generator, validation_steps=val_steps_per_epoch,
+                        callbacks=[plateau_callback])
 
-    model.save(model_save_path)
+    # =========
+    # SAVE MODEL TO DISK
+    # =========
+    # Time string to add to model_save_path
+    now = datetime.now()
+    time_string = now.strftime('%y%m%d_%H%M')
+
+    dur = time() - start
+    num_epochs = len(results.epoch)
+    acc = results.history['accuracy'][-1]
+    val_acc = results.history['val_accuracy'][-1]
+    write_str = f'{dur} seconds\n' \
+                f'{num_epochs} epochs\n' \
+                f'{acc * 100}% accuracy\n' \
+                f'{val_acc * 100}% validation accuracy'
+    with open(model_save_path + '_' + time_string + '.txt', 'w') as file:
+        file.write(write_str)
+
+    model.save(model_save_path + time_string + '.hdf5')
 
 
 if __name__ == '__main__':
     # Read settings.ini configuration file
-    path_settings = r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Code\artifactID\settings.ini"
+    path_settings = 'settings.ini'
     config = configparser.ConfigParser()
     config.read(path_settings)
 
     config_data = config['DATA']
     path_data_root = config_data['path_save_datagen']
+    if not Path(path_data_root).exists():
+        raise Exception(f'{path_data_root} does not exist')
 
-    config_model = config['MODEL']
-    path_save_model = config_model['path_save_model']
-    main(data_root=path_data_root, model_save_path=path_save_model)
+    config_training = config['TRAINING']
+    filter_artifact = config_training['filter_artifact']
+    path_save_model = config_training['path_save_model']
+    if '.hdf5' in path_save_model:
+        path_save_model = path_save_model.replace('.hdf5', '')
+    main(data_root=path_data_root, model_save_path=path_save_model, filter_artifact=filter_artifact)

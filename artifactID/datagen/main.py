@@ -7,7 +7,7 @@ sys.path.insert(0, path_search)
 from artifactID.datagen import fov_wrap_datagen, offres_datagen, snr_datagen
 
 # Read settings.ini configuration file
-path_settings = r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Code\artifactID\settings.ini"
+path_settings = 'settings.ini'
 config = configparser.ConfigParser()
 config.read(path_settings)
 config_data = config['DATA']
