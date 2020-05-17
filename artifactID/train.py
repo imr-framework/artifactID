@@ -1,9 +1,7 @@
 import configparser
-import math
 from datetime import datetime
 from pathlib import Path
 from time import time
-from warnings import warn
 
 import numpy as np
 import tensorflow as tf
@@ -11,7 +9,9 @@ from tensorflow.keras.layers import Conv3D, Dense, Flatten, MaxPool3D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential
 
-from artifactID.data_utils import shuffle_dataset, data_generator
+from artifactID.common.data_utils import get_paths_labels
+from artifactID.cross_val_callback import SliceUpdateCallback
+from artifactID.keras_data_generator import KerasDataGenerator
 
 # =========
 # TENSORFLOW CONFIG
@@ -26,68 +26,45 @@ mixed_precision.set_policy(policy)
 
 
 def main(data_root: str, model_save_path: str, filter_artifact: str):
-    # Construct `x` and `y` training pairs
-    x_paths = []
-    y_labels = []
-    if filter_artifact in ['b0', 'snr', 'wrap']:
-        pattern = filter_artifact + '*'
-    else:
-        warning = f'Unknown value for filter_artifact. Valid values are b0, snr and wrap. ' \
-                  f'You passed: {filter_artifact}. Training to classify all artifacts.'
-        warn(warning)
-        pattern = '*'
-
-    for artifact_folder in Path(data_root).glob(pattern):
-        files = list(artifact_folder.glob('*.npy'))
-        files = list(map(lambda x: str(x), files))  # Convert from Path to str
-        x_paths.extend(files)
-        label = artifact_folder.name
-        if pattern == '*':
-            label = label.rstrip('0123456789')
-        y_labels.extend([label] * len(files))
-
-    # Shuffle
-    x_paths, y_labels = shuffle_dataset(x=x_paths, y=y_labels)
+    # Get paths and labels
+    x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
 
     # =========
-    # SPLIT DATASET
+    # DESIGN NETWORK
     # =========
-    train_num = int(len(x_paths) * 0.75)
-    x_paths_train = x_paths[:train_num]
-    y_labels_train = y_labels[:train_num]
-
-    val_num = int(train_num + (len(x_paths) * 0.20))
-    x_paths_val = x_paths[train_num:val_num]
-    y_labels_val = y_labels[train_num:val_num]
-
-    # Design network
     model = Sequential()
     model.add(Conv3D(filters=32, kernel_size=3, input_shape=(240, 240, 155, 1), activation='relu'))
-    model.add(MaxPool3D())
-    model.add(Conv3D(filters=16, kernel_size=3, activation='relu'))
-    model.add(MaxPool3D())
+    model.add(MaxPool3D(strides=3))
     model.add(Flatten())
     model.add(Dense(units=len(np.unique(y_labels)), activation='softmax'))
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
+    # =========
+    # TRAINING SETUP
+    # =========
     batch_size = 1
-    plateau_callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=1)
-    train_steps_per_epoch = math.ceil(len(x_paths_train) / batch_size)
-    val_steps_per_epoch = math.ceil(len(x_paths_val) / batch_size)
-    train_generator = tf.data.Dataset.from_generator(generator=data_generator,
-                                                     args=[x_paths_train, y_labels_train, 'train'],
+    dataset = KerasDataGenerator(x=x_paths, y=y_labels, val_pc=0.2, batch_size=batch_size)
+    train_steps_per_epoch = dataset.train_steps_per_epoch
+    val_steps_per_epoch = dataset.val_steps_per_epoch
+    train_generator = tf.data.Dataset.from_generator(generator=dataset.train_flow,
                                                      output_types=(tf.float16, tf.int8),
                                                      output_shapes=(tf.TensorShape([240, 240, 155, 1]),
                                                                     tf.TensorShape([1]))).batch(batch_size=batch_size)
-    val_generator = tf.data.Dataset.from_generator(generator=data_generator,
-                                                   args=[x_paths_val, y_labels_val, 'train'],
+    val_generator = tf.data.Dataset.from_generator(generator=dataset.val_flow,
                                                    output_types=(tf.float16, tf.int8),
                                                    output_shapes=(tf.TensorShape([240, 240, 155, 1]),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
+    # Cross-validation callback to update slices after each epoch
+    cross_val_callback = SliceUpdateCallback(data_generator=dataset)
+
+    # =========
+    # TRAINING
+    # =========
     start = time()
     results = model.fit(x=train_generator, steps_per_epoch=train_steps_per_epoch, epochs=5,
                         validation_data=val_generator, validation_steps=val_steps_per_epoch,
-                        callbacks=[plateau_callback])
+                        callbacks=[cross_val_callback])
+    dur = time() - start
 
     # =========
     # SAVE MODEL TO DISK
@@ -96,7 +73,6 @@ def main(data_root: str, model_save_path: str, filter_artifact: str):
     now = datetime.now()
     time_string = now.strftime('%y%m%d_%H%M')
 
-    dur = time() - start
     num_epochs = len(results.epoch)
     acc = results.history['accuracy'][-1]
     val_acc = results.history['val_accuracy'][-1]
@@ -121,7 +97,7 @@ if __name__ == '__main__':
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
 
-    config_training = config['TRAINING']
+    config_training = config['TRAIN']
     filter_artifact = config_training['filter_artifact']
     path_save_model = config_training['path_save_model']
     if '.hdf5' in path_save_model:

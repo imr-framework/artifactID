@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 
-from artifactID.data_utils import shuffle_dataset, data_generator
+from artifactID.common.data_utils import shuffle_dataset, data_generator
 
 # =========
 # TENSORFLOW INIT
@@ -70,6 +70,6 @@ if __name__ == '__main__':
     config_data = config['DATA']
     path_data_root = config_data['path_save_datagen']
 
-    config_model = config['MODEL']
+    config_model = config['EVAL']
     path_save_model = config_model['path_save_model']
     main(data_root=path_data_root, model_load_path=path_save_model)
