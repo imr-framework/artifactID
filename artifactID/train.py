@@ -43,19 +43,21 @@ def main(data_root: str, model_save_path: str, filter_artifact: str):
     # TRAINING SETUP
     # =========
     batch_size = 1
-    dataset = KerasDataGenerator(x=x_paths, y=y_labels, val_pc=0.2, batch_size=batch_size)
-    train_steps_per_epoch = dataset.train_steps_per_epoch
-    val_steps_per_epoch = dataset.val_steps_per_epoch
-    train_generator = tf.data.Dataset.from_generator(generator=dataset.train_flow,
+    seed = 5  # Seed for numpy.random
+    keras_data_generator = KerasDataGenerator(x=x_paths, y=y_labels, val_pc=0.2, eval_pc=0.05, seed=seed,
+                                              batch_size=batch_size)
+    train_steps_per_epoch = keras_data_generator.train_steps_per_epoch
+    val_steps_per_epoch = keras_data_generator.val_steps_per_epoch
+    train_generator = tf.data.Dataset.from_generator(generator=keras_data_generator.train_flow,
                                                      output_types=(tf.float16, tf.int8),
                                                      output_shapes=(tf.TensorShape([240, 240, 155, 1]),
                                                                     tf.TensorShape([1]))).batch(batch_size=batch_size)
-    val_generator = tf.data.Dataset.from_generator(generator=dataset.val_flow,
+    val_generator = tf.data.Dataset.from_generator(generator=keras_data_generator.val_flow,
                                                    output_types=(tf.float16, tf.int8),
                                                    output_shapes=(tf.TensorShape([240, 240, 155, 1]),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
     # Cross-validation callback to update slices after each epoch
-    cross_val_callback = SliceUpdateCallback(data_generator=dataset)
+    cross_val_callback = SliceUpdateCallback(data_generator=keras_data_generator)
 
     # =========
     # TRAINING
@@ -83,7 +85,7 @@ def main(data_root: str, model_save_path: str, filter_artifact: str):
     with open(model_save_path + '_' + time_string + '.txt', 'w') as file:
         file.write(write_str)
 
-    model.save(model_save_path + time_string + '.hdf5')
+    model.save(model_save_path + '_' + time_string + '.hdf5')
 
 
 if __name__ == '__main__':

@@ -5,7 +5,8 @@ import numpy as np
 
 
 class KerasDataGenerator:
-    def __init__(self, x, y, val_pc: float, batch_size: int):
+    def __init__(self, x, y, val_pc: float, eval_pc: float, batch_size: int, seed: int = 0):
+        np.random.seed(seed=seed)
         self.batch_size = batch_size
 
         # Shuffle
@@ -22,6 +23,17 @@ class KerasDataGenerator:
         self.val_x = None
         self.val_y = None
 
+        # Eval
+        self.eval_pc = eval_pc
+        self.eval_num = int(len(self.x) * self.eval_pc)
+        eval_random_idx = np.random.randint(len(self.x), size=self.eval_num)
+        self.eval_x = np.take(self.x, eval_random_idx)
+        self.eval_y = np.take(self.y, eval_random_idx)
+
+        # Remove test samples from the main dataset
+        self.x = np.delete(self.x, eval_random_idx)
+        self.y = np.delete(self.y, eval_random_idx)
+
         # Cross-validation
         self.val_pc = val_pc
         self.val_num = int(len(self.x) * self.val_pc)
@@ -33,6 +45,7 @@ class KerasDataGenerator:
         # Steps per epoch
         self.train_steps_per_epoch = math.ceil(len(self.train_x) / self.batch_size)
         self.val_steps_per_epoch = math.ceil(self.val_num / self.batch_size)
+        self.eval_steps_per_epoch = math.ceil(self.eval_num / self.batch_size)
 
     def _shuffle_dataset(self, x, y):
         assert len(x) == len(y)
@@ -45,7 +58,7 @@ class KerasDataGenerator:
         while True:
             for counter in range(len(x)):
                 _x = np.load(x[counter])  # Load volume
-                _x = np.expand_dims(_x, axis=3)  # Convert shape to (240, 240, 155, 1
+                _x = np.expand_dims(_x, axis=3)  # Convert shape to (240, 240, 155, 1)
                 _x = _x.astype(np.float16)  # Mixed precision
 
                 label = y[counter]  # Get label
@@ -58,6 +71,9 @@ class KerasDataGenerator:
 
     def val_flow(self):
         return self._flow(x=self.val_x, y=self.val_y)
+
+    def eval_flow(self):
+        return self._flow(x=self.eval_x, y=self.eval_y)
 
     def update_slices_cross_validation(self):
         self.val_start = self.val_end
