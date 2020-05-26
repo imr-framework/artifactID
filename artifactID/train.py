@@ -1,22 +1,26 @@
 import configparser
+import itertools
+import math
+import pickle
 from datetime import datetime
 from pathlib import Path
 from time import time
 
 import numpy as np
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Conv3D, Dense, Flatten, MaxPool3D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential
 
-from artifactID.common.data_utils import get_paths_labels
-from artifactID.cross_val_callback import SliceUpdateCallback
-from artifactID.keras_data_generator import KerasDataGenerator
+from artifactID.common.data_ops import get_paths_labels
+from artifactID.common.data_ops import make_generator
 
 # =========
 # TENSORFLOW CONFIG
 # =========
 # Prevent OOM-related crash
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpus[0], True)
 
@@ -25,67 +29,84 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(data_root: str, model_save_path: str, filter_artifact: str):
+def main(data_root: str, filter_artifact: str):
+    # =========
+    # DATA SPLITTING
+    # =========
     # Get paths and labels
     x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
+    dict_label_integer = dict(zip(np.unique(y_labels), itertools.count(0)))
+    y_int = np.array([dict_label_integer[label] for label in y_labels])
+
+    # Train-test split
+    test_pc = 0.10
+    test_idx = np.random.randint(len(x_paths), size=int(test_pc * len(x_paths)))
+    np.random.seed(5)
+    x_paths = np.delete(x_paths, test_idx)
+    y_int = np.delete(y_int, test_idx)
+
+    # Train-val split
+    val_pc = 0.1
+    split = train_test_split(x_paths, y_int, test_size=val_pc, shuffle=True)
+    train_x_paths, val_x_paths, train_y_int, val_y_int = split
 
     # =========
-    # DESIGN NETWORK
+    # MODEL
     # =========
+    # model = get_3D_model(y=y_labels)
     model = Sequential()
     model.add(Conv3D(filters=32, kernel_size=3, input_shape=(240, 240, 155, 1), activation='relu'))
     model.add(MaxPool3D(strides=3))
     model.add(Flatten())
-    model.add(Dense(units=len(np.unique(y_labels)), activation='softmax'))
+    model.add(Dense(units=len(np.unique(train_y_int)), activation='softmax'))
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
-    # =========
-    # TRAINING SETUP
-    # =========
-    batch_size = 1
-    seed = 5  # Seed for numpy.random
-    keras_data_generator = KerasDataGenerator(x=x_paths, y=y_labels, val_pc=0.2, eval_pc=0.05, seed=seed,
-                                              batch_size=batch_size)
-    train_steps_per_epoch = keras_data_generator.train_steps_per_epoch
-    val_steps_per_epoch = keras_data_generator.val_steps_per_epoch
-    train_generator = tf.data.Dataset.from_generator(generator=keras_data_generator.train_flow,
-                                                     output_types=(tf.float16, tf.int8),
-                                                     output_shapes=(tf.TensorShape([240, 240, 155, 1]),
-                                                                    tf.TensorShape([1]))).batch(batch_size=batch_size)
-    val_generator = tf.data.Dataset.from_generator(generator=keras_data_generator.val_flow,
-                                                   output_types=(tf.float16, tf.int8),
-                                                   output_shapes=(tf.TensorShape([240, 240, 155, 1]),
-                                                                  tf.TensorShape([1]))).batch(batch_size=batch_size)
-    # Cross-validation callback to update slices after each epoch
-    cross_val_callback = SliceUpdateCallback(data_generator=keras_data_generator)
 
     # =========
     # TRAINING
     # =========
+    batch_size = 1
     start = time()
-    results = model.fit(x=train_generator, steps_per_epoch=train_steps_per_epoch, epochs=5,
-                        validation_data=val_generator, validation_steps=val_steps_per_epoch,
-                        callbacks=[cross_val_callback])
+
+    train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
+    train_dataset = tf.data.Dataset.from_generator(generator=make_generator,
+                                                   args=[train_x_paths, train_y_int],
+                                                   output_types=(tf.float16, tf.int8),
+                                                   output_shapes=(tf.TensorShape([240, 240, 155, 1]),
+                                                                  tf.TensorShape([1]))).batch(batch_size=batch_size)
+    val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
+    val_dataset = tf.data.Dataset.from_generator(generator=make_generator,
+                                                 args=[val_x_paths, val_y_int],
+                                                 output_types=(tf.float16, tf.int8),
+                                                 output_shapes=(tf.TensorShape([240, 240, 155, 1]),
+                                                                tf.TensorShape([1]))).batch(batch_size=batch_size)
+    history = model.fit(x=train_dataset, steps_per_epoch=train_steps_per_epoch,
+                        validation_data=val_dataset, validation_steps=val_steps_per_epoch,
+                        epochs=5)
     dur = time() - start
 
     # =========
     # SAVE MODEL TO DISK
     # =========
-    # Time string to add to model_save_path
-    now = datetime.now()
-    time_string = now.strftime('%y%m%d_%H%M')
-
-    num_epochs = len(results.epoch)
-    acc = results.history['accuracy'][-1]
-    val_acc = results.history['val_accuracy'][-1]
-    write_str = f'{dur} seconds\n' \
+    num_epochs = len(history.epoch)
+    acc = history.history['accuracy'][-1]
+    val_acc = history.history['val_accuracy'][-1]
+    write_str = f'{filter_artifact} data\n' \
+                f'{dur} seconds\n' \
                 f'{num_epochs} epochs\n' \
                 f'{acc * 100}% accuracy\n' \
                 f'{val_acc * 100}% validation accuracy'
-    with open(model_save_path + '_' + time_string + '.txt', 'w') as file:
+    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
+    if filter_artifact == 'none':  # Was this model trained on all or specific data?
+        folder = Path('output') / f'{time_string}_all'
+    else:
+        folder = Path('output') / f'{time_string}_{filter_artifact}'
+    if not folder.exists():  # Make output/<> directory
+        folder.mkdir(parents=True)
+    with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
         file.write(write_str)
-
-    model.save(model_save_path + '_' + time_string + '.hdf5')
+    with open(str(folder / 'history'), 'wb') as pkl:  # Save history
+        pickle.dump(history.history, pkl)
+    model.save(str(folder / 'model.hdf5'))  # Save model
 
 
 if __name__ == '__main__':
@@ -101,7 +122,5 @@ if __name__ == '__main__':
 
     config_training = config['TRAIN']
     filter_artifact = config_training['filter_artifact']
-    path_save_model = config_training['path_save_model']
-    if '.hdf5' in path_save_model:
-        path_save_model = path_save_model.replace('.hdf5', '')
-    main(data_root=path_data_root, model_save_path=path_save_model, filter_artifact=filter_artifact)
+    filter_artifact = filter_artifact.lower()
+    main(data_root=path_data_root, filter_artifact=filter_artifact)
