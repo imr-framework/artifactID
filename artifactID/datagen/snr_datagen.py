@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from artifactID.common.data_utils import glob_brats_t1, load_nifti_vol
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol
 
 
 class SNRObj:
@@ -89,7 +89,11 @@ def main(path_brats: str, path_save: str):
     np.random.shuffle(arr_snr_range)
 
     path_save = Path(path_save)
-    path_all = [path_save / "mask", *[path_save / f'snr{snr}' for snr in arr_snr_range]]
+    path_all = [path_save / "mask"]
+    for snr in arr_snr_range:
+        if snr == 2 or snr == 5:
+            snr = 99
+        path_all.append(path_save / f'snr{snr}')
     # Make save folders if they do not exist
     for p in path_all:
         if not p.exists():
@@ -138,5 +142,7 @@ def main(path_brats: str, path_save: str):
         n_zeros = (orig_num_slices - arr_snr.shape[2]) / 2
         n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
         arr_snr = np.pad(arr_snr, [[0, 0], [0, 0], n_zeros])
+        if snr == 2 or snr == 5:
+            snr = 99
         _path_save = str(path_save / f'snr{snr}' / subject_name) + '.npy'
         np.save(arr=arr_snr, file=_path_save)  # Save to disk

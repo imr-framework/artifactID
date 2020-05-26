@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from artifactID.common.data_utils import glob_brats_t1, load_nifti_vol
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol
 
 
 def main(path_brats: str, path_save: str):
