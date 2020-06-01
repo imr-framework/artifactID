@@ -19,22 +19,22 @@ gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpus[0], True)
 
 
-def _plot(paths, y_true, y_pred):
+def _viz(paths, y_true, y_pred):
     # Choose 6 paths at random and load the volumes
     random_idx = np.random.randint(len(paths), size=6)
-    vols = []
+    arr_vols = []
     for id in random_idx:
-        _v = np.load(paths[id]).astype(np.float)
-        vols.append(_v)
-    vols = np.stack(vols)
+        vol = np.load(paths[id]).astype(np.float)
+        arr_vols.append(vol)
+    arr_vols = np.stack(arr_vols)
 
-    shape = vols[0].shape
+    shape = arr_vols[0].shape
     center_slice = np.squeeze(shape)[2] // 2
 
-    for counter, v in enumerate(vols):
+    for counter, v in enumerate(arr_vols):
         plt.subplot(3, 3, counter + 1)
         plt.imshow(v[:, :, center_slice], cmap='gray')
-        text = f'True: {y_true[counter]}\n' \
+        text = f'Label: {y_true[counter]}\n' \
                f'Pred: {y_pred[counter]}'
         plt.title(text)
         plt.axis('off')
@@ -50,20 +50,22 @@ def main(data_root: str, filter_artifact: str, model_load_path: str, random_seed
     # =========
     # Get paths and labels
     x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
-    dict_label_integer = dict(zip(np.unique(y_labels), itertools.count(0)))
-    y_int = np.array([dict_label_integer[label] for label in y_labels])
+    dict_label_int = dict(zip(np.unique(y_labels), itertools.count(0)))
+    y_true = np.array([dict_label_int[label] for label in y_labels])
 
     # Split dataset
     test_pc = 0.10
     test_idx = np.random.randint(len(x_paths), size=int(test_pc * len(x_paths)))
-    test_x_paths = x_paths[test_idx]
+    x_paths = x_paths[test_idx]
+    y_labels = y_labels[test_idx]
+    y_true = y_true[test_idx]
 
     # =========
     # EVALUATE
     # =========
     batch_size = 1
     eval_generator = tf.data.Dataset.from_generator(generator=make_generator,
-                                                    args=[test_x_paths],
+                                                    args=[x_paths],
                                                     output_types=(tf.float16),
                                                     output_shapes=(tf.TensorShape([240, 240, 155, 1]))).batch(
         batch_size=batch_size)
@@ -74,16 +76,25 @@ def main(data_root: str, filter_artifact: str, model_load_path: str, random_seed
     eval_steps_per_epoch = math.ceil(len(test_idx) / batch_size)
     y_pred = model.predict(x=eval_generator, steps=eval_steps_per_epoch)
     y_pred = np.argmax(y_pred, axis=1)
-    accuracy = len(np.where(y_int[test_idx] == y_pred)[0]) / len(y_int[test_idx])
+    accuracy = len(np.where(y_true == y_pred)[0]) / len(y_true)  # Compute accuracy
     print(f'Accuracy: {accuracy}')
 
+    # Append evaluation run to log
     log_path = list(Path(model_load_path).parts)
     log_path[-1] = 'log.txt'
     log_path = Path('').joinpath(*log_path)
-    with open(log_path, 'a') as file:  # Append evaluation run
+    with open(log_path, 'a') as file:
         time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
         write_str = f'\n{time_string} {accuracy * 100}% evaluation accuracy '
         file.write(write_str)
+
+    # =========
+    # VISUALIZING EVALUATION RESULTS
+    # =========
+    # Convert int to labels
+    dict_int_label = dict(zip(dict_label_int.values(), dict_label_int.keys()))
+    y_pred = list(map(lambda i: dict_int_label[i], y_pred))
+    _viz(paths=x_paths, y_true=y_labels, y_pred=y_pred)
 
 
 if __name__ == '__main__':
@@ -92,12 +103,10 @@ if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read(path_settings)
 
-    config_data = config['DATA']
-    path_data_root = config_data['path_save_datagen']
+    config_eval = config['EVAL']
+    path_data_root = config_eval['path_read_data']
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-
-    config_eval = config['EVAL']
     filter_artifact = config_eval['filter_artifact']
     filter_artifact = filter_artifact.lower()
     random_seed = int(config_eval['random_seed'])

@@ -53,7 +53,6 @@ def main(data_root: str, filter_artifact: str):
     # =========
     # MODEL
     # =========
-    # model = get_3D_model(y=y_labels)
     model = Sequential()
     model.add(Conv3D(filters=32, kernel_size=3, input_shape=(240, 240, 155, 1), activation='relu'))
     model.add(MaxPool3D(strides=3))
@@ -115,12 +114,10 @@ if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read(path_settings)
 
-    config_data = config['DATA']
-    path_data_root = config_data['path_save_datagen']
+    config_training = config['TRAIN']
+    path_data_root = config_training['path_read_data']
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-
-    config_training = config['TRAIN']
     filter_artifact = config_training['filter_artifact']
     filter_artifact = filter_artifact.lower()
     main(data_root=path_data_root, filter_artifact=filter_artifact)
