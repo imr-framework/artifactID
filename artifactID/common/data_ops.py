@@ -1,6 +1,8 @@
+import math
 from pathlib import Path
 from warnings import warn
 
+import cv2
 import nibabel as nb
 import numpy as np
 
@@ -63,7 +65,13 @@ def get_paths_labels(data_root: str, filter_artifact: str):
     return np.array(x_paths), np.array(y_labels)
 
 
-def make_generator(x, y=None):
+def get_paths(data_root: str):
+    files = list(Path(data_root).glob('**/*'))
+    files = list(map(lambda x: str(x), files))  # Convert from Path to str
+    return np.array(files)
+
+
+def make_generator_train(x, y=None):
     while True:
         for counter in range(len(x)):
             _x = np.load(x[counter])  # Load volume
@@ -75,3 +83,34 @@ def make_generator(x, y=None):
                 yield _x, _y
             else:
                 yield _x
+
+
+def make_generator_inference(x):
+    while True:
+        for counter in range(len(x)):
+            _x = np.load(x[counter])  # Load volume
+
+            # Resize each slice to 240, 240
+            _x_resized = []
+            for i in range(_x.shape[2]):  # Shape is (height, width, slices)
+                sli = _x[:, :, i]
+                sli_resized = cv2.resize(sli, (240, 240))
+                _x_resized.append(sli_resized)
+            _x = np.stack(_x_resized)  # Slices will be first dimension
+
+            # Pad/crop to 155 slices accordingly
+            num_slices = _x.shape[0]  # Shape is (slices, 240, 240)
+            if num_slices < 155:  # Pad to 155 slices
+                pad_width = (155 - _x.shape[0]) / 2
+                if isinstance(pad_width, float):  # pad_width is not an integer, adjust leading and trailing pad widths
+                    pad_width = (math.floor(pad_width), math.ceil(pad_width))
+                else:  # pad_width is an integer
+                    pad_width = (pad_width, pad_width)
+                _x = np.pad(_x, (pad_width, (0, 0), (0, 0)))
+            elif num_slices > 155:  # Center-crop to 155 slices
+                center_slice = _x.shape[0] // 2
+                _x = _x[:, :, center_slice - 77:center_slice + 78]
+            _x = np.moveaxis(_x, [0, 1, 2], [2, 0, 1])  # Scroll through slices along last dimension
+            _x = np.expand_dims(_x, axis=3)  # Convert shape to (240, 240, 155, 1)
+            _x = _x.astype(np.float16)  # Mixed precision TF2
+            yield _x

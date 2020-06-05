@@ -9,12 +9,12 @@ from time import time
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Conv3D, Dense, Flatten, MaxPool3D
+from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, GlobalMaxPool3D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential
 
 from artifactID.common.data_ops import get_paths_labels
-from artifactID.common.data_ops import make_generator
+from artifactID.common.data_ops import make_generator_train
 
 # =========
 # TENSORFLOW CONFIG
@@ -54,9 +54,10 @@ def main(data_root: str, filter_artifact: str):
     # MODEL
     # =========
     model = Sequential()
-    model.add(Conv3D(filters=32, kernel_size=3, input_shape=(240, 240, 155, 1), activation='relu'))
-    model.add(MaxPool3D(strides=3))
-    model.add(Flatten())
+    model.add(Conv3D(filters=32, kernel_size=3, input_shape=(None, None, None, 1), activation='relu'))
+    model.add(MaxPool3D())
+    model.add(Conv3D(filters=16, kernel_size=3, activation='relu'))
+    model.add(GlobalMaxPool3D())
     model.add(Dense(units=len(np.unique(train_y_int)), activation='softmax'))
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
@@ -67,16 +68,16 @@ def main(data_root: str, filter_artifact: str):
     start = time()
 
     train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
-    train_dataset = tf.data.Dataset.from_generator(generator=make_generator,
+    train_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                    args=[train_x_paths, train_y_int],
                                                    output_types=(tf.float16, tf.int8),
-                                                   output_shapes=(tf.TensorShape([240, 240, 155, 1]),
+                                                   output_shapes=(tf.TensorShape([None, None, None, 1]),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
     val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
-    val_dataset = tf.data.Dataset.from_generator(generator=make_generator,
+    val_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                  args=[val_x_paths, val_y_int],
                                                  output_types=(tf.float16, tf.int8),
-                                                 output_shapes=(tf.TensorShape([240, 240, 155, 1]),
+                                                 output_shapes=(tf.TensorShape([None, None, None, 1]),
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
     history = model.fit(x=train_dataset, steps_per_epoch=train_steps_per_epoch,
                         validation_data=val_dataset, validation_steps=val_steps_per_epoch,
@@ -94,7 +95,7 @@ def main(data_root: str, filter_artifact: str):
                 f'{num_epochs} epochs\n' \
                 f'{acc * 100}% accuracy\n' \
                 f'{val_acc * 100}% validation accuracy'
-    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
+    time_string = datetime.now().strftime('%d%m%y_%H%M')  # Time stamp when saving model
     if filter_artifact == 'none':  # Was this model trained on all or specific data?
         folder = Path('output') / f'{time_string}_all'
     else:
@@ -103,6 +104,9 @@ def main(data_root: str, filter_artifact: str):
         folder.mkdir(parents=True)
     with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
         file.write(write_str)
+        # Write model summary to file
+        file.write('\n\n')
+        model.summary(print_fn=lambda line: file.write(line + '\n'))
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
         pickle.dump(history.history, pkl)
     model.save(str(folder / 'model.hdf5'))  # Save model

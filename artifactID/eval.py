@@ -9,7 +9,7 @@ import tensorflow as tf
 from matplotlib import pyplot as plt
 from tensorflow.keras.models import load_model
 
-from artifactID.common.data_ops import get_paths_labels, make_generator
+from artifactID.common.data_ops import get_paths_labels, make_generator_train
 
 # =========
 # TENSORFLOW INIT
@@ -64,7 +64,7 @@ def main(data_root: str, filter_artifact: str, model_load_path: str, random_seed
     # EVALUATE
     # =========
     batch_size = 1
-    eval_generator = tf.data.Dataset.from_generator(generator=make_generator,
+    eval_generator = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                     args=[x_paths],
                                                     output_types=(tf.float16),
                                                     output_shapes=(tf.TensorShape([240, 240, 155, 1]))).batch(
