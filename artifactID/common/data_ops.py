@@ -4,6 +4,7 @@ from warnings import warn
 
 import cv2
 import nibabel as nb
+from skimage.util.shape import view_as_blocks
 import numpy as np
 
 
@@ -39,6 +40,20 @@ def load_nifti_vol(path: str):
     vol = vol[:, :, slice_content_idx]
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
+
+def get_patches(arr:np.ndarray, patch_size):
+    shape = arr.shape
+    # Convert patch_size to a tuple if necessary
+    if isinstance(patch_size, int):
+        patch_size = [patch_size] * len(shape)
+    patch_size = tuple(patch_size)
+
+    # Check shape compatibility
+    for counter, p in enumerate(patch_size):
+        if shape[counter] % p != 0:
+            raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
+
+    return view_as_blocks(arr_in=arr, block_shape=patch_size)
 
 
 def get_paths_labels(data_root: str, filter_artifact: str):

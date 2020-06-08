@@ -2,8 +2,9 @@ import math
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
 
 
 class SNRObj:
@@ -74,7 +75,7 @@ def _load_vol_as_snrobj(path: str):
     return arr_sliobj
 
 
-def main(path_brats: str, path_save: str):
+def main(path_brats: str, path_save: str, patch_size: int):
     arr_snr_range = [2, 5, 11, 15, 20]
 
     # =========
@@ -89,7 +90,7 @@ def main(path_brats: str, path_save: str):
     np.random.shuffle(arr_snr_range)
 
     path_save = Path(path_save)
-    path_all = [path_save / "mask"]
+    path_all = []
     for snr in arr_snr_range:
         if snr == 2 or snr == 5:
             snr = 99
@@ -102,11 +103,9 @@ def main(path_brats: str, path_save: str):
     # =========
     # DATAGEN
     # =========
-    for ind, path_t1 in enumerate(arr_path_brats_t1):
+    arr_patches = []
+    for ind, path_t1 in tqdm(enumerate(arr_path_brats_t1)):
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
-
-        pc = round((ind + 1) / num_subjects * 100, ndigits=2)
-        print(f'{pc}%', end=', ', flush=True)
 
         # Load from disk, comes with ideal (0) noise outside brain
         arr_ideal_noise_sliobj = _load_vol_as_snrobj(path_t1)  # Array of slice objects
@@ -116,21 +115,35 @@ def main(path_brats: str, path_save: str):
 
         # SNR
         snr = arr_snr_range[ind]
-        arr_snr_sliobj = [sliobj.add_awgn(target_snr_db=snr) for sliobj in
-                          arr_real_noise_sliobj]  # Corrupt to `snr` dB
-        arr_snr = [x.data for x in arr_snr_sliobj]
-        arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
-        arr_snr = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        arr_sliobj = [sliobj.add_awgn(target_snr_db=snr) for sliobj in
+                      arr_real_noise_sliobj]  # Corrupt to `snr` dB
+        vol = [x.data for x in arr_sliobj]  # Stack slices into a single volume
+        vol = np.stack(vol)  # Convert from list to numpy.ndarray
+        vol = np.moveaxis(vol, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
         # Normalize to [0, 1]
-        _max = arr_snr.max()
-        _min = arr_snr.min()
-        arr_snr = (arr_snr - _min) / (_max - _min)
-        # Zero pad back to 155
-        orig_num_slices = 155
-        n_zeros = (orig_num_slices - arr_snr.shape[2]) / 2
-        n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
-        arr_snr = np.pad(arr_snr, [[0, 0], [0, 0], n_zeros])
+        _max = vol.max()
+        _min = vol.min()
+        vol = (vol - _min) / (_max - _min)
+
+        # Zero pad to compatible shape
+        pad = []
+        shape = vol.shape
+        for s in shape:
+            if s % patch_size != 0:
+                p = patch_size - (s % patch_size)
+                pad.append((math.floor(p / 2), math.ceil(p / 2)))
+            else:
+                pad.append((0, 0))
+
+        # Extract patches
+        vol = np.pad(array=vol, pad_width=pad)
+        patches = get_patches(arr=vol, patch_size=patch_size)
+        patches = patches.reshape((-1, patch_size, patch_size, patch_size))
+        arr_patches.extend(patches)
+
+        # Save to disk
         if snr == 2 or snr == 5:
             snr = 99
-        _path_save = str(path_save / f'snr{snr}' / subject_name) + '.npy'
-        np.save(arr=arr_snr, file=_path_save)  # Save to disk
+        for counter, p in enumerate(arr_patches):
+            _path_save = str(path_save / f'snr{snr}' / (subject_name + f'_patch{counter}.npy'))
+            np.save(arr=p, file=_path_save)  # Save to disk
