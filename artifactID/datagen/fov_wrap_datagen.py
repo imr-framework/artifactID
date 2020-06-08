@@ -2,12 +2,11 @@ import math
 from pathlib import Path
 
 import numpy as np
-from tqdm import tqdm
 
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol
 
 
-def main(path_brats: str, path_save: str, patch_size: int):
+def main(path_brats: str, path_save: str):
     arr_wrap_range = [55, 60, 65, 70, 75, 80]
 
     # =========
@@ -31,9 +30,11 @@ def main(path_brats: str, path_save: str, patch_size: int):
     # =========
     # DATAGEN
     # =========
-    arr_patches = []
-    for ind, path_t1 in tqdm(enumerate(arr_path_brats_t1)):
+    for ind, path_t1 in enumerate(arr_path_brats_t1):
         subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
+
+        pc = round((ind + 1) / num_subjects * 100, ndigits=2)
+        print(f'{pc}%', end=', ', flush=True)
 
         vol = load_nifti_vol(path_t1)
         wrap_ex = arr_wrap_range[ind]
@@ -47,24 +48,12 @@ def main(path_brats: str, path_save: str, patch_size: int):
         _min = middle.min()
         middle = (middle - _min) / (_max - _min)
 
-        # Zero pad to compatible shape
-        pad = []
-        shape = middle.shape
-        for s in shape:
-            if s % patch_size != 0:
-                p = patch_size - (s % patch_size)
-                pad.append((math.floor(p / 2), math.ceil(p / 2)))
-            else:
-                pad.append((0, 0))
+        # Zero pad back to 155
+        orig_num_slices = 155
+        n_zeros = (orig_num_slices - middle.shape[2]) / 2
+        n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
+        middle = np.pad(middle, [[0, 0], [0, 0], n_zeros])
+        middle = middle.astype(np.float16)
 
-        # Extract patches
-        middle = np.pad(array=middle, pad_width=pad)
-        patches = get_patches(arr=middle, patch_size=patch_size)
-        patches = patches.reshape((-1, patch_size, patch_size, patch_size))
-        arr_patches.extend(patches)
-
-        # Save to disk
-        for counter, p in enumerate(arr_patches):
-            _path_save = str(path_save / f'wrap{wrap_ex}' / (subject_name + f'_patch{counter}.npy'))
-            p = p.astype(np.float16)
-            np.save(arr=p, file=_path_save)  # Save to disk
+        _path_save = str(path_save / f'wrap{wrap_ex}' / subject_name) + '.npy'
+        np.save(arr=middle, file=_path_save)  # Save to disk
