@@ -111,18 +111,6 @@ def main(path_brats: str, path_save: str):
         # Load from disk, comes with ideal (0) noise outside brain
         arr_ideal_noise_sliobj = _load_vol_as_snrobj(path_t1)  # Array of slice objects
 
-        # Brain masks
-        arr_masks = [x.obj_mask for x in arr_ideal_noise_sliobj]  # Array of slice masks
-        arr_masks = np.stack(arr_masks)  # Convert from list to numpy.ndarray
-        arr_masks = np.moveaxis(arr_masks, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
-        # Zero pad back to 155
-        orig_num_slices = 155
-        n_zeros = (orig_num_slices - arr_masks.shape[2]) / 2
-        n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
-        arr_masks = np.pad(arr_masks, [[0, 0], [0, 0], n_zeros])
-        _path_save = str(path_save / 'mask' / subject_name) + '.npy'
-        np.save(arr=arr_masks, file=_path_save)  # Save to disk
-
         # Add real noise (0.001 STD AWGN)
         arr_real_noise_sliobj = [sliobj.add_real_noise() for sliobj in arr_ideal_noise_sliobj]  # Array of slice objects
 
