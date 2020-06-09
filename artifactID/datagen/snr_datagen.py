@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.datagen.data_ops import glob_brats_t1, load_nifti_vol, get_patches
 
 
 class SNRObj:
@@ -75,38 +75,23 @@ def _load_vol_as_snrobj(path: str):
     return arr_sliobj
 
 
-def main(path_brats: str, path_save: str, patch_size: int):
+def main(path_read_data: str, path_save_data: str, patch_size: int):
     arr_snr_range = [2, 5, 11, 15, 20]
 
     # =========
-    # BRATS PATHS
+    # PATHS
     # =========
-    arr_path_brats_t1 = glob_brats_t1(path_brats=path_brats)
-    num_subjects = len(arr_path_brats_t1)
-
+    arr_path_read = glob_brats_t1(path_brats=path_read_data)
+    path_save_data = Path(path_save_data)
     subjects_per_class = math.ceil(
-        len(arr_path_brats_t1) / len(arr_snr_range))  # Calculate number of subjects per class
+        len(arr_path_read) / len(arr_snr_range))  # Calculate number of subjects per class
     arr_snr_range = arr_snr_range * subjects_per_class
     np.random.shuffle(arr_snr_range)
-
-    path_save = Path(path_save)
-    path_all = []
-    for snr in arr_snr_range:
-        if snr == 2 or snr == 5:
-            snr = 99
-        path_all.append(path_save / f'snr{snr}')
-    # Make save folders if they do not exist
-    for p in path_all:
-        if not p.exists():
-            p.mkdir(parents=True)
 
     # =========
     # DATAGEN
     # =========
-    arr_patches = []
-    for ind, path_t1 in tqdm(enumerate(arr_path_brats_t1)):
-        subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
-
+    for ind, path_t1 in tqdm(enumerate(arr_path_read)):
         # Load from disk, comes with ideal (0) noise outside brain
         arr_ideal_noise_sliobj = _load_vol_as_snrobj(path_t1)  # Array of slice objects
 
@@ -139,11 +124,16 @@ def main(path_brats: str, path_save: str, patch_size: int):
         vol = np.pad(array=vol, pad_width=pad)
         patches = get_patches(arr=vol, patch_size=patch_size)
         patches = patches.reshape((-1, patch_size, patch_size, patch_size))
-        arr_patches.extend(patches)
+        patches = patches.astype(np.float16)
 
         # Save to disk
         if snr == 2 or snr == 5:
             snr = 99
-        for counter, p in enumerate(arr_patches):
-            _path_save = str(path_save / f'snr{snr}' / (subject_name + f'_patch{counter}.npy'))
-            np.save(arr=p, file=_path_save)  # Save to disk
+        _path_save = path_save_data.joinpath(f'snr{snr}')
+        if not _path_save.exists():
+            _path_save.mkdir(parents=True)
+        for counter, p in enumerate(patches):
+            subject = path_t1.name.replace('.nii.gz', '')
+            _path_save2 = _path_save.joinpath(subject)
+            _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+            np.save(arr=p, file=_path_save2)

@@ -4,8 +4,8 @@ from warnings import warn
 
 import cv2
 import nibabel as nb
-from skimage.util.shape import view_as_blocks
 import numpy as np
+from skimage.util.shape import view_as_blocks
 
 
 def glob_brats_t1(path_brats: str):
@@ -41,7 +41,8 @@ def load_nifti_vol(path: str):
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
 
-def get_patches(arr:np.ndarray, patch_size):
+
+def get_patches(arr: np.ndarray, patch_size):
     shape = arr.shape
     # Convert patch_size to a tuple if necessary
     if isinstance(patch_size, int):
@@ -87,10 +88,29 @@ def get_paths(data_root: str):
 
 
 def make_generator_train(x, y=None):
+    """
+    Generator for training that yields volumes loaded from .npy files specified in `x`. Also yields paired labels from
+    `y`, if required. The data are shuffled at the start of every epoch.
+
+    Parameters
+    ==========
+    x : array-like
+        Array of paths to .npy files to load.
+    y : array-like, optional
+        Array of labels corresponding to the .npy files to be loaded from `x`.\
+        If `None`, this generator only loads and yields .npy files.
+    """
     while True:
+        # Shuffle at the start of every epoch
+        idx = np.arange(len(x))
+        np.random.shuffle(idx)
+        x = x[idx]
+        if y is not None:
+            y = y[idx]
+
         for counter in range(len(x)):
             _x = np.load(x[counter])  # Load volume
-            _x = np.expand_dims(_x, axis=3)  # Convert shape to (240, 240, 155, 1)
+            _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
             _x = _x.astype(np.float16)  # Mixed precision
 
             if y is not None:
