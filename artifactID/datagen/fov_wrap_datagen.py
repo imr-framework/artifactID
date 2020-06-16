@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
-from artifactID.datagen.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
 
 
 def main(path_read_data: str, path_save_data: str, patch_size: int):

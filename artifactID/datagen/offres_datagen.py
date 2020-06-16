@@ -7,7 +7,7 @@ import scipy.io as sio
 
 
 from artifactID.datagen import generate_fieldmap
-from artifactID.datagen.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
 from orc import ORC
 
 

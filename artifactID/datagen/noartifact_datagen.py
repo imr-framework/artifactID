@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
-from artifactID.datagen.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
 
 
 def main(path_read_data: str, path_save_data: str, patch_size: int):
@@ -12,7 +12,9 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     # PATHS
     # =========
     arr_path_read = glob_brats_t1(path_brats=path_read_data)
-    path_save_data = Path(path_save_data)
+    path_save_data = Path(path_save_data) / 'noartifact'
+    if not path_save_data.exists():
+        path_save_data.mkdir(parents=True)
 
     # =========
     # DATAGEN
@@ -43,6 +45,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         # Save to disk
         for counter, p in enumerate(patches):
             subject = path_t1.name.replace('.nii.gz', '')
-            _path_save = path_save_data.joinpath('noartifact', subject)
+            _path_save = path_save_data.joinpath(subject)
             _path_save = str(_path_save) + f'_patch{counter}.npy'
             np.save(arr=p, file=_path_save)
