@@ -1,6 +1,5 @@
 import configparser
 import itertools
-import math
 from datetime import datetime
 from pathlib import Path
 
@@ -9,14 +8,15 @@ import tensorflow as tf
 from matplotlib import pyplot as plt
 from tensorflow.keras.models import load_model
 
-from artifactID.common.data_ops import get_paths_labels, make_generator_train
+from artifactID.common.data_ops import get_paths_labels, make_generator_inference
+
 
 # =========
 # TENSORFLOW INIT
 # =========
 # Prevent crash
-gpus = tf.config.experimental.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(gpus[0], True)
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(gpus[0], True)
 
 
 def _viz(paths, y_true, y_pred):
@@ -42,9 +42,8 @@ def _viz(paths, y_true, y_pred):
     plt.show()
 
 
-def main(data_root: str, filter_artifact: str, model_load_path: str, random_seed: int):
-    np.random.seed(random_seed)
-
+def main(batch_size: int, data_root: str, filter_artifact: str, model_load_path: str, patch_size: int,
+         random_seed: int):
     # =========
     # DATA LOADING
     # =========
@@ -55,6 +54,7 @@ def main(data_root: str, filter_artifact: str, model_load_path: str, random_seed
 
     # Split dataset
     test_pc = 0.10
+    np.random.seed(random_seed)
     test_idx = np.random.randint(len(x_paths), size=int(test_pc * len(x_paths)))
     x_paths = x_paths[test_idx]
     y_labels = y_labels[test_idx]
@@ -63,18 +63,17 @@ def main(data_root: str, filter_artifact: str, model_load_path: str, random_seed
     # =========
     # EVALUATE
     # =========
-    batch_size = 1
-    eval_generator = tf.data.Dataset.from_generator(generator=make_generator_train,
+    eval_generator = tf.data.Dataset.from_generator(generator=make_generator_inference,
                                                     args=[x_paths],
                                                     output_types=(tf.float16),
-                                                    output_shapes=(tf.TensorShape([240, 240, 155, 1]))).batch(
-        batch_size=batch_size)
+                                                    output_shapes=(
+                                                        tf.TensorShape([patch_size, patch_size, patch_size, 1]))) \
+        .batch(batch_size=batch_size)
 
     print('Loading model...')
     model = load_model(model_load_path)
     print(f'\nEvaluating model on {len(test_idx)} samples...')
-    eval_steps_per_epoch = math.ceil(len(test_idx) / batch_size)
-    y_pred = model.predict(x=eval_generator, steps=eval_steps_per_epoch)
+    y_pred = model.predict(x=eval_generator)
     y_pred = np.argmax(y_pred, axis=1)
     accuracy = len(np.where(y_true == y_pred)[0]) / len(y_true)  # Compute accuracy
     print(f'Accuracy: {accuracy}')
@@ -104,14 +103,16 @@ if __name__ == '__main__':
     config.read(path_settings)
 
     config_eval = config['EVAL']
+    batch_size = int(config_eval['batch_size'])
+    filter_artifact = config_eval['filter_artifact']
+    filter_artifact = filter_artifact.lower()
+    patch_size = int(config_eval['patch_size'])
     path_data_root = config_eval['path_read_data']
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-    filter_artifact = config_eval['filter_artifact']
-    filter_artifact = filter_artifact.lower()
-    random_seed = int(config_eval['random_seed'])
     path_save_model = config_eval['path_pretrained_model']
     if '.hdf5' not in path_save_model:
         path_save_model += '.hdf5'
-    main(data_root=path_data_root, filter_artifact=filter_artifact, model_load_path=path_save_model,
-         random_seed=random_seed)
+    random_seed = int(config_eval['random_seed'])
+    main(batch_size=batch_size, data_root=path_data_root, filter_artifact=filter_artifact,
+         model_load_path=path_save_model, patch_size=patch_size, random_seed=random_seed)

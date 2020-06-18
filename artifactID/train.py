@@ -9,7 +9,7 @@ from time import time
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, GlobalMaxPool3D
+from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, Flatten
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential
 
@@ -20,7 +20,6 @@ from artifactID.datagen.data_ops import make_generator_train
 # TENSORFLOW CONFIG
 # =========
 # Prevent OOM-related crash
-
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpus[0], True)
 
@@ -29,7 +28,7 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(batch_size: int, data_root: str, filter_artifact: str):
+def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int):
     # =========
     # DATA SPLITTING
     # =========
@@ -38,10 +37,10 @@ def main(batch_size: int, data_root: str, filter_artifact: str):
     dict_label_integer = dict(zip(np.unique(y_labels), itertools.count(0)))
     y_int = np.array([dict_label_integer[label] for label in y_labels])
 
-    # Train-test split
+    # Test split
     test_pc = 0.10
+    np.random.seed(random_seed)
     test_idx = np.random.randint(len(x_paths), size=int(test_pc * len(x_paths)))
-    np.random.seed(5)
     x_paths = np.delete(arr=x_paths, obj=test_idx)
     y_int = np.delete(y_int, test_idx)
 
@@ -53,12 +52,13 @@ def main(batch_size: int, data_root: str, filter_artifact: str):
     # =========
     # MODEL
     # =========
-    input_shape = (32, 32, 32, 1)
+    input_shape = (patch_size, patch_size, patch_size, 1)
     model = Sequential()
     model.add(Conv3D(filters=32, kernel_size=3, input_shape=input_shape, activation='relu'))
     model.add(MaxPool3D())
     model.add(Conv3D(filters=16, kernel_size=3, activation='relu'))
-    model.add(GlobalMaxPool3D())
+    model.add(MaxPool3D())
+    model.add(Flatten())
     model.add(Dense(units=len(np.unique(train_y_int)), activation='softmax'))
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
@@ -80,7 +80,7 @@ def main(batch_size: int, data_root: str, filter_artifact: str):
                                                  output_shapes=(tf.TensorShape(input_shape),
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
     history = model.fit(x=train_dataset, steps_per_epoch=train_steps_per_epoch, validation_data=val_dataset,
-                        validation_steps=val_steps_per_epoch, epochs=5)
+                        validation_steps=val_steps_per_epoch, epochs=epochs)
     dur = time() - start
 
     # =========
@@ -91,6 +91,7 @@ def main(batch_size: int, data_root: str, filter_artifact: str):
     val_acc = history.history['val_accuracy'][-1]
     write_str = f'{filter_artifact} data\n' \
                 f'{dur} seconds\n' \
+                f'{batch_size} batch size\n' \
                 f'{num_epochs} epochs\n' \
                 f'{acc * 100}% accuracy\n' \
                 f'{val_acc * 100}% validation accuracy'
@@ -119,9 +120,17 @@ if __name__ == '__main__':
 
     config_training = config['TRAIN']
     batch_size = int(config_training['batch_size'])
+    epochs = int(config_training['epochs'])
+    filter_artifact = config_training['filter_artifact']
+    filter_artifact = filter_artifact.lower()
+    patch_size = int(config_training['patch_size'])
     path_data_root = config_training['path_read_data']
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-    filter_artifact = config_training['filter_artifact']
-    filter_artifact = filter_artifact.lower()
-    main(batch_size=batch_size, data_root=path_data_root, filter_artifact=filter_artifact)
+    random_seed = int(config_training['random_seed'])
+    main(batch_size=batch_size,
+         data_root=path_data_root,
+         epochs=epochs,
+         filter_artifact=filter_artifact,
+         patch_size=patch_size,
+         random_seed=random_seed)
