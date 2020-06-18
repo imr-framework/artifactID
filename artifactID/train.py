@@ -93,6 +93,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                 f'{dur} seconds\n' \
                 f'{batch_size} batch size\n' \
                 f'{num_epochs} epochs\n' \
+                f'{patch_size} patch size\n' \
                 f'{acc * 100}% accuracy\n' \
                 f'{val_acc * 100}% validation accuracy'
     time_string = datetime.now().strftime('%d%m%y_%H%M')  # Time stamp when saving model
