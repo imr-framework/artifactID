@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol
+from artifactID.common.data_ops import glob_brats_t1, glob_nifti, load_nifti_vol, get_patches
 
 
 class SNRObj:
@@ -80,7 +80,10 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     # =========
     # PATHS
     # =========
-    arr_path_read = glob_brats_t1(path_brats=path_read_data)
+    if 'miccai' in path_read_data.lower():
+        arr_path_read = glob_brats_t1(path_brats=path_read_data)
+    else:
+        arr_path_read = glob_nifti(path=path_read_data)
     path_save_data = Path(path_save_data)
     subjects_per_class = math.ceil(
         len(arr_path_read) / len(arr_snr_range))  # Calculate number of subjects per class
@@ -132,6 +135,14 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for counter, p in enumerate(patches):
+            if np.sum(p) == 0:  # Discard empty patches
+                continue
+
+            # Normalize to [0, 1]
+            _max = p.max()
+            _min = p.min()
+            p = (p - _min) / (_max - _min)
+
             subject = path_t1.name.replace('.nii.gz', '')
             _path_save2 = _path_save.joinpath(subject)
             _path_save2 = str(_path_save2) + f'_patch{counter}.npy'

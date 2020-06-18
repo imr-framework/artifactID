@@ -4,14 +4,17 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.common.data_ops import glob_brats_t1, glob_nifti, load_nifti_vol, get_patches
 
 
 def main(path_read_data: str, path_save_data: str, patch_size: int):
     # =========
     # PATHS
     # =========
-    arr_path_read = glob_brats_t1(path_brats=path_read_data)
+    if 'miccai' in path_read_data.lower():
+        arr_path_read = glob_brats_t1(path_brats=path_read_data)
+    else:
+        arr_path_read = glob_nifti(path=path_read_data)
     path_save_data = Path(path_save_data) / 'noartifact'
     if not path_save_data.exists():
         path_save_data.mkdir(parents=True)
@@ -21,10 +24,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     # =========
     for path_t1 in tqdm(arr_path_read):
         vol = load_nifti_vol(path_t1)
-        # Normalize to [0, 1]
-        _max = vol.max()
-        _min = vol.min()
-        vol = (vol - _min) / (_max - _min)
 
         # Zero pad to compatible shape
         pad = []
@@ -44,6 +43,14 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
 
         # Save to disk
         for counter, p in enumerate(patches):
+            if np.sum(p) == 0:  # Discard empty patches
+                continue
+
+            # Normalize to [0, 1]
+            _max = p.max()
+            _min = p.min()
+            p = (p - _min) / (_max - _min)
+
             subject = path_t1.name.replace('.nii.gz', '')
             _path_save = path_save_data.joinpath(subject)
             _path_save = str(_path_save) + f'_patch{counter}.npy'
