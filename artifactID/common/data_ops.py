@@ -1,18 +1,22 @@
-import math
 from pathlib import Path
 from warnings import warn
 
-import cv2
 import nibabel as nb
 import numpy as np
 from skimage.util.shape import view_as_blocks
 
 
+def glob_nifti(path: str):
+    path = Path(path)
+    arr_path = list(path.glob('**/*.nii.gz'))
+    return arr_path
+
+
 def glob_brats_t1(path_brats: str):
     path_brats = Path(path_brats)
-    arr_paths_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
-    arr_paths_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_paths_brats_t1))
-    return arr_paths_brats_t1
+    arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
+    arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
+    return arr_path_brats_t1
 
 
 def load_nifti_vol(path: str):
@@ -87,65 +91,56 @@ def get_paths(data_root: str):
     return np.array(files)
 
 
-def make_generator_train(x, y=None):
+def make_generator_train(x, y):
     """
-    Generator for training that yields volumes loaded from .npy files specified in `x`. Also yields paired labels from
-    `y`, if required. The data are shuffled at the start of every epoch.
+    Training generator indefinitely yielding volumes loaded from .npy files specified in `x`. Also yields paired labels
+    from `y`. Every `while` loop iteration counts as one epoch. The data are shuffled at the start of every epoch.
 
     Parameters
     ==========
     x : array-like
         Array of paths to .npy files to load.
     y : array-like, optional
-        Array of labels corresponding to the .npy files to be loaded from `x`.\
-        If `None`, this generator only loads and yields .npy files.
+        Array of labels corresponding to the .npy files to be loaded from `x`.
+
+    Yields
+    ======
+    _x : np.ndarray
+        Array containing a single volume of shape (..., 1) and datatype np.float16.
+    _y : np.ndarray
+        Array containing a single corresponding label to the volume yielded in `_x` of datatype np.int8.
     """
     while True:
         # Shuffle at the start of every epoch
         idx = np.arange(len(x))
         np.random.shuffle(idx)
         x = x[idx]
-        if y is not None:
-            y = y[idx]
+        y = y[idx]
 
         for counter in range(len(x)):
             _x = np.load(x[counter])  # Load volume
-            _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
+            _x = np.expand_dims(_x, axis=3)  # Convert shape to (..., 1)
             _x = _x.astype(np.float16)  # Mixed precision
 
-            if y is not None:
-                _y = np.array([y[counter]]).astype(np.int8)
-                yield _x, _y
-            else:
-                yield _x
+            _y = np.array([y[counter]]).astype(np.int8)
+            yield _x, _y
 
 
 def make_generator_inference(x):
-    while True:
-        for counter in range(len(x)):
-            _x = np.load(x[counter])  # Load volume
+    """
+    Inference generator yielding volumes loaded from .npy files specified in `x`.
 
-            # Resize each slice to 240, 240
-            _x_resized = []
-            for i in range(_x.shape[2]):  # Shape is (height, width, slices)
-                sli = _x[:, :, i]
-                sli_resized = cv2.resize(sli, (240, 240))
-                _x_resized.append(sli_resized)
-            _x = np.stack(_x_resized)  # Slices will be first dimension
+    Parameters
+    ==========
+    x : array-like
+        Array of paths to .npy files to load.
 
-            # Pad/crop to 155 slices accordingly
-            num_slices = _x.shape[0]  # Shape is (slices, 240, 240)
-            if num_slices < 155:  # Pad to 155 slices
-                pad_width = (155 - _x.shape[0]) / 2
-                if isinstance(pad_width, float):  # pad_width is not an integer, adjust leading and trailing pad widths
-                    pad_width = (math.floor(pad_width), math.ceil(pad_width))
-                else:  # pad_width is an integer
-                    pad_width = (pad_width, pad_width)
-                _x = np.pad(_x, (pad_width, (0, 0), (0, 0)))
-            elif num_slices > 155:  # Center-crop to 155 slices
-                center_slice = _x.shape[0] // 2
-                _x = _x[:, :, center_slice - 77:center_slice + 78]
-            _x = np.moveaxis(_x, [0, 1, 2], [2, 0, 1])  # Scroll through slices along last dimension
-            _x = np.expand_dims(_x, axis=3)  # Convert shape to (240, 240, 155, 1)
-            _x = _x.astype(np.float16)  # Mixed precision TF2
-            yield _x
+    Yields
+    ======
+    _x : np.ndarray
+        Array containing a single volume of shape (..., 1) and datatype np.float16.
+    """
+    for counter in range(len(x)):
+        _x = np.load(x[counter])  # Load volume
+        _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
+        yield _x
