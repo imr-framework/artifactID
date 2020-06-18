@@ -13,8 +13,8 @@ from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, GlobalMaxPool3D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential
 
-from artifactID.common.data_ops import get_paths_labels
-from artifactID.common.data_ops import make_generator_train
+from artifactID.datagen.data_ops import get_paths_labels
+from artifactID.datagen.data_ops import make_generator_train
 
 # =========
 # TENSORFLOW CONFIG
@@ -29,7 +29,7 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(data_root: str, filter_artifact: str):
+def main(batch_size: int, data_root: str, filter_artifact: str):
     # =========
     # DATA SPLITTING
     # =========
@@ -42,7 +42,7 @@ def main(data_root: str, filter_artifact: str):
     test_pc = 0.10
     test_idx = np.random.randint(len(x_paths), size=int(test_pc * len(x_paths)))
     np.random.seed(5)
-    x_paths = np.delete(x_paths, test_idx)
+    x_paths = np.delete(arr=x_paths, obj=test_idx)
     y_int = np.delete(y_int, test_idx)
 
     # Train-val split
@@ -53,8 +53,9 @@ def main(data_root: str, filter_artifact: str):
     # =========
     # MODEL
     # =========
+    input_shape = (32, 32, 32, 1)
     model = Sequential()
-    model.add(Conv3D(filters=32, kernel_size=3, input_shape=(None, None, None, 1), activation='relu'))
+    model.add(Conv3D(filters=32, kernel_size=3, input_shape=input_shape, activation='relu'))
     model.add(MaxPool3D())
     model.add(Conv3D(filters=16, kernel_size=3, activation='relu'))
     model.add(GlobalMaxPool3D())
@@ -64,24 +65,22 @@ def main(data_root: str, filter_artifact: str):
     # =========
     # TRAINING
     # =========
-    batch_size = 1
     start = time()
 
     train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
     train_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                    args=[train_x_paths, train_y_int],
                                                    output_types=(tf.float16, tf.int8),
-                                                   output_shapes=(tf.TensorShape([None, None, None, 1]),
+                                                   output_shapes=(tf.TensorShape(input_shape),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
     val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
     val_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                  args=[val_x_paths, val_y_int],
                                                  output_types=(tf.float16, tf.int8),
-                                                 output_shapes=(tf.TensorShape([None, None, None, 1]),
+                                                 output_shapes=(tf.TensorShape(input_shape),
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
-    history = model.fit(x=train_dataset, steps_per_epoch=train_steps_per_epoch,
-                        validation_data=val_dataset, validation_steps=val_steps_per_epoch,
-                        epochs=5)
+    history = model.fit(x=train_dataset, steps_per_epoch=train_steps_per_epoch, validation_data=val_dataset,
+                        validation_steps=val_steps_per_epoch, epochs=5)
     dur = time() - start
 
     # =========
@@ -119,9 +118,10 @@ if __name__ == '__main__':
     config.read(path_settings)
 
     config_training = config['TRAIN']
+    batch_size = int(config_training['batch_size'])
     path_data_root = config_training['path_read_data']
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
     filter_artifact = config_training['filter_artifact']
     filter_artifact = filter_artifact.lower()
-    main(data_root=path_data_root, filter_artifact=filter_artifact)
+    main(batch_size=batch_size, data_root=path_data_root, filter_artifact=filter_artifact)
