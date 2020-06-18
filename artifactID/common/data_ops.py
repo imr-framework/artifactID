@@ -40,8 +40,8 @@ def load_nifti_vol(path: str):
     vol = vol[:, :, slice_content_idx]
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
-
-
+  
+  
 def get_patches(arr: np.ndarray, patch_size):
     shape = arr.shape
     # Convert patch_size to a tuple if necessary
@@ -57,7 +57,7 @@ def get_patches(arr: np.ndarray, patch_size):
     return view_as_blocks(arr_in=arr, block_shape=patch_size)
 
 
-def get_paths_labels(data_root: str, filter_artifact: str):
+  def get_paths_labels(data_root: str, filter_artifact: str):
     # Construct `x` and `y` training pairs
     if filter_artifact in ['b0', 'snr', 'wrap']:
         glob_pattern = filter_artifact + '*'

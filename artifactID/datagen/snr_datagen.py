@@ -2,9 +2,8 @@ import math
 from pathlib import Path
 
 import numpy as np
-from tqdm import tqdm
 
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol
 
 
 class SNRObj:
@@ -100,11 +99,11 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
 
         # SNR
         snr = arr_snr_range[ind]
-        arr_sliobj = [sliobj.add_awgn(target_snr_db=snr) for sliobj in
-                      arr_real_noise_sliobj]  # Corrupt to `snr` dB
-        vol = [x.data for x in arr_sliobj]  # Stack slices into a single volume
-        vol = np.stack(vol)  # Convert from list to numpy.ndarray
-        vol = np.moveaxis(vol, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        arr_snr_sliobj = [sliobj.add_awgn(target_snr_db=snr) for sliobj in
+                          arr_real_noise_sliobj]  # Corrupt to `snr` dB
+        arr_snr = [x.data for x in arr_snr_sliobj]
+        arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
+        arr_snr = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
         # Normalize to [0, 1]
         _max = vol.max()
         _min = vol.min()
