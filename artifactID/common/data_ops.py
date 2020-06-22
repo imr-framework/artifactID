@@ -61,7 +61,7 @@ def get_patches(arr: np.ndarray, patch_size):
     return view_as_blocks(arr_in=arr, block_shape=patch_size)
 
 
-  def get_paths_labels(data_root: str, filter_artifact: str):
+def get_paths_labels(data_root: str, filter_artifact: str):
     # Construct `x` and `y` training pairs
     if filter_artifact in ['b0', 'snr', 'wrap']:
         glob_pattern = filter_artifact + '*'

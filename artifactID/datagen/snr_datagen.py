@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 from artifactID.common.data_ops import glob_brats_t1, glob_nifti, load_nifti_vol, get_patches
 
@@ -106,7 +107,7 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
                           arr_real_noise_sliobj]  # Corrupt to `snr` dB
         arr_snr = [x.data for x in arr_snr_sliobj]
         arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
-        arr_snr = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        vol = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
         # Normalize to [0, 1]
         _max = vol.max()
         _min = vol.min()

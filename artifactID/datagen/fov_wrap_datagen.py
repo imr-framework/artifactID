@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 from artifactID.common.data_ops import glob_brats_t1, glob_nifti, load_nifti_vol, get_patches
 
