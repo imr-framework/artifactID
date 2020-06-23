@@ -13,8 +13,8 @@ from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, Flatten
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential
 
-from artifactID.datagen.data_ops import get_paths_labels
-from artifactID.datagen.data_ops import make_generator_train
+from artifactID.common.data_ops import get_paths_labels
+from artifactID.common.data_ops import make_generator_train
 
 # =========
 # TENSORFLOW CONFIG
@@ -29,13 +29,22 @@ mixed_precision.set_policy(policy)
 
 
 def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int):
+    # Make save destination
+    time_string = datetime.now().strftime('%d%m%y_%H%M')  # Time stamp when saving model
+    if filter_artifact == 'none':  # Was this model trained on all or specific data?
+        folder = Path('output') / f'{time_string}_all'
+    else:
+        folder = Path('output') / f'{time_string}_{filter_artifact}'
+    if not folder.exists():  # Make output/* directory
+        folder.mkdir(parents=True)
+
     # =========
     # DATA SPLITTING
     # =========
     # Get paths and labels
     x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
-    dict_label_integer = dict(zip(np.unique(y_labels), itertools.count(0)))
-    y_int = np.array([dict_label_integer[label] for label in y_labels])
+    dict_label_int = dict(zip(np.unique(y_labels), itertools.count(0)))  # Map labels to int
+    y_int = np.fromiter(map(lambda label: dict_label_int[label], y_labels))
 
     # Test split
     test_pc = 0.10
@@ -65,8 +74,6 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # =========
     # TRAINING
     # =========
-    start = time()
-
     train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
     train_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                    args=[train_x_paths, train_y_int],
@@ -79,8 +86,22 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                  output_types=(tf.float16, tf.int8),
                                                  output_shapes=(tf.TensorShape(input_shape),
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
-    history = model.fit(x=train_dataset, steps_per_epoch=train_steps_per_epoch, validation_data=val_dataset,
-                        validation_steps=val_steps_per_epoch, epochs=epochs)
+
+    # Callback
+    path_checkpoint = Path(folder) / 'model.{epoch:02d}-{val_acc:.2f}.hdf5'
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=str(path_checkpoint),
+                                                                   save_weights_only=False,
+                                                                   monitor='val_acc',
+                                                                   mode='max',
+                                                                   save_best_only=False)
+
+    start = time()
+    history = model.fit(x=train_dataset,
+                        callbacks=[model_checkpoint_callback],
+                        steps_per_epoch=train_steps_per_epoch,
+                        validation_data=val_dataset,
+                        validation_steps=val_steps_per_epoch,
+                        epochs=epochs)
     dur = time() - start
 
     # =========
@@ -93,16 +114,9 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                 f'{dur} seconds\n' \
                 f'{batch_size} batch size\n' \
                 f'{num_epochs} epochs\n' \
-                f'{patch_size} patch size\n' \
                 f'{acc * 100}% accuracy\n' \
                 f'{val_acc * 100}% validation accuracy'
-    time_string = datetime.now().strftime('%d%m%y_%H%M')  # Time stamp when saving model
-    if filter_artifact == 'none':  # Was this model trained on all or specific data?
-        folder = Path('output') / f'{time_string}_all'
-    else:
-        folder = Path('output') / f'{time_string}_{filter_artifact}'
-    if not folder.exists():  # Make output/<> directory
-        folder.mkdir(parents=True)
+
     with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
         file.write(write_str)
         # Write model summary to file
