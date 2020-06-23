@@ -36,10 +36,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         middle[:wrap] += bottom * opacity
         middle[-wrap:] += top * opacity
         middle = np.pad(middle, [[wrap, wrap], [0, 0], [0, 0]])
-        # Normalize to [0, 1]
-        _max = middle.max()
-        _min = middle.min()
-        middle = (middle - _min) / (_max - _min)
 
         # Zero pad to compatible shape
         pad = []
@@ -63,15 +59,15 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for counter, p in enumerate(patches):
-            if np.sum(p) == 0:  # Discard empty patches
-                continue
+            if np.sum(p) != 0:  # Discard empty patches
+                # Normalize to [0, 1]
+                _max = p.max()
+                _min = p.min()
+                if _max == _min:
+                    p = (p - _min) / (_max - _min)
 
-            # Normalize to [0, 1]
-            _max = p.max()
-            _min = p.min()
-            p = (p - _min) / (_max - _min)
-
-            subject = path_t1.name.replace('.nii.gz', '')
-            _path_save2 = _path_save.joinpath(subject)
-            _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-            np.save(arr=p, file=_path_save2)
+                    suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+                    subject = path_t1.name.replace(suffix, '')
+                    _path_save2 = _path_save.joinpath(subject)
+                    _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+                    np.save(arr=p, file=_path_save2)

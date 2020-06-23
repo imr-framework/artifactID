@@ -9,7 +9,8 @@ from skimage.util.shape import view_as_blocks
 def glob_nifti(path: str):
     path = Path(path)
     arr_path = list(path.glob('**/*.nii.gz'))
-    return arr_path
+    arr_path2 = list(path.glob('**/*.nii'))
+    return arr_path + arr_path2
 
 
 def glob_brats_t1(path_brats: str):
@@ -44,8 +45,8 @@ def load_nifti_vol(path: str):
     vol = vol[:, :, slice_content_idx]
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
-  
-  
+
+
 def get_patches(arr: np.ndarray, patch_size):
     shape = arr.shape
     # Convert patch_size to a tuple if necessary
