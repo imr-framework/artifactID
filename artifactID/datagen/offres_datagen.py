@@ -124,18 +124,23 @@ def main(path_read_data: str, path_save_data: str, path_ktraj: str, path_dcf: st
         arr_patches.extend(patches)
         arr_labels.extend([freq] * len(patches))
 
-        _path_save = path_save_data.joinpath(f'wrap{freq}')
+        _path_save = path_save_data.joinpath(f'b0{freq}')
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for counter, p in enumerate(patches):
 
             subject = path_t1.name.replace('.nii.gz', '')
             _path_save2 = _path_save.joinpath(subject)
-            if np.count_nonzero(p) == 0:
-                _path_save2 = str(_path_save2) + f'_patch{counter}_allzero.npy'
+            if np.count_nonzero(p) == 0 or p.min() == p.max():
+               pass
             else:
+                # Normalize to [0, 1]
+                _max = p.max()
+                _min = p.min()
+                p = (p - _min) / (_max - _min)
+
                 _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-            np.save(arr=p, file=_path_save2)
+                np.save(arr=p, file=_path_save2)
 
         '''subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
         _path_save = str(path_save / f'b0_{freq}' / subject_name) + '.npy'
