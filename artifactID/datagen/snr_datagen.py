@@ -126,8 +126,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         # Extract patches
         vol = np.pad(array=vol, pad_width=pad)
         patches = get_patches(arr=vol, patch_size=patch_size)
-        patches = patches.reshape((-1, patch_size, patch_size, patch_size))
-        patches = patches.astype(np.float16)
 
         # Save to disk
         if snr == 2 or snr == 5:

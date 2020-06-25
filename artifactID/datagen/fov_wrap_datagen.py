@@ -50,7 +50,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         # Extract patches
         middle = np.pad(array=middle, pad_width=pad)
         patches = get_patches(arr=middle, patch_size=patch_size)
-        patches = patches.reshape((-1, patch_size, patch_size, patch_size)).astype(np.float16)
         arr_patches.extend(patches)
         arr_labels.extend([wrap] * len(patches))
 

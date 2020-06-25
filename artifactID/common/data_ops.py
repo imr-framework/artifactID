@@ -47,19 +47,16 @@ def load_nifti_vol(path: str):
     return vol
 
 
-def get_patches(arr: np.ndarray, patch_size):
-    shape = arr.shape
-    # Convert patch_size to a tuple if necessary
-    if isinstance(patch_size, int):
-        patch_size = [patch_size] * len(shape)
-    patch_size = tuple(patch_size)
-
+def get_patches(arr: np.ndarray, patch_size: int):
     # Check shape compatibility
+    shape = arr.shape
     for counter, p in enumerate(patch_size):
         if shape[counter] % p != 0:
             raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
 
-    return view_as_blocks(arr_in=arr, block_shape=patch_size)
+    patches = view_as_blocks(arr_in=arr, block_shape=(patch_size, patch_size, patch_size))
+    patches = patches.reshape((-1, patch_size, patch_size, patch_size))
+    return patches.astype(np.float16)
 
 
 def get_paths_labels(data_root: str, filter_artifact: str):
