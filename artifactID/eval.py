@@ -92,9 +92,10 @@ def main(batch_size: int, data_root: str, filter_artifact: str, model_load_path:
     log_path[-1] = 'log.txt'
     log_path = Path('').joinpath(*log_path)
     with open(log_path, 'a') as file:
-        time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
-        write_str = f'\n{time_string} {accuracy * 100}% evaluation accuracy '
-        write_str += '\nConfusion matrix:\n'
+        time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when appending eval run
+        write_str = f'\n{time_string} ' \
+                    f'{accuracy * 100}% evaluation accuracy ' \
+                    f'\nConfusion matrix\n'
         write_str += str(conf_matrix)
         write_str += '\n'
         write_str += str(dict_int_label)
