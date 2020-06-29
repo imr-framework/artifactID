@@ -108,10 +108,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         arr_snr = [x.data for x in arr_snr_sliobj]
         arr_snr = np.stack(arr_snr)  # Convert from list to numpy.ndarray
         vol = np.moveaxis(arr_snr, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
-        # Normalize to [0, 1]
-        _max = vol.max()
-        _min = vol.min()
-        vol = (vol - _min) / (_max - _min)
 
         # Zero pad to compatible shape
         pad = []
@@ -122,10 +118,9 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
                 pad.append((math.floor(p / 2), math.ceil(p / 2)))
             else:
                 pad.append((0, 0))
-
-        # Extract patches
         vol = np.pad(array=vol, pad_width=pad)
-        patches = get_patches(arr=vol, patch_size=patch_size)
+
+        patches = get_patches(arr=vol, patch_size=patch_size)  # Extract patches
 
         # Save to disk
         if snr == 2 or snr == 5:

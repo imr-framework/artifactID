@@ -50,8 +50,8 @@ def load_nifti_vol(path: str):
 def get_patches(arr: np.ndarray, patch_size: int):
     # Check shape compatibility
     shape = arr.shape
-    for counter, p in enumerate(patch_size):
-        if shape[counter] % p != 0:
+    for s in shape:
+        if s % patch_size != 0:
             raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
 
     patches = view_as_blocks(arr_in=arr, block_shape=(patch_size, patch_size, patch_size))

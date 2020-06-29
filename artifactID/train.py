@@ -30,7 +30,7 @@ mixed_precision.set_policy(policy)
 
 def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int):
     # Make save destination
-    time_string = datetime.now().strftime('%d%m%y_%H%M')  # Time stamp when saving model
+    time_string = datetime.now().strftime('%m%d%y_%H%M')  # Time stamp when saving model
     if filter_artifact == 'none':  # Was this model trained on all or specific data?
         folder = Path('output') / f'{time_string}_all'
     else:
@@ -44,7 +44,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # Get paths and labels
     x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
     dict_label_int = dict(zip(np.unique(y_labels), itertools.count(0)))  # Map labels to int
-    y_int = np.fromiter(map(lambda label: dict_label_int[label], y_labels))
+    y_int = np.fromiter(map(lambda label: dict_label_int[label], y_labels), dtype=np.int8)
 
     # Test split
     test_pc = 0.10
@@ -88,7 +88,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
 
     # Callback
-    path_checkpoint = Path(folder) / 'model.{epoch:02d}-{val_acc:.2f}.hdf5'
+    path_checkpoint = Path(folder) / 'model.{epoch:02d}.hdf5'
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=str(path_checkpoint),
                                                                    save_weights_only=False,
                                                                    monitor='val_acc',

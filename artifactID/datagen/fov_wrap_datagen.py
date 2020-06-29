@@ -26,8 +26,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     # =========
     # DATAGEN
     # =========
-    arr_patches = []
-    arr_labels = []
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
         vol = load_nifti_vol(path_t1)
         wrap = arr_wrap_range[ind]
@@ -46,12 +44,9 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
                 pad.append((math.floor(p / 2), math.ceil(p / 2)))
             else:
                 pad.append((0, 0))
-
-        # Extract patches
         middle = np.pad(array=middle, pad_width=pad)
-        patches = get_patches(arr=middle, patch_size=patch_size)
-        arr_patches.extend(patches)
-        arr_labels.extend([wrap] * len(patches))
+
+        patches = get_patches(arr=middle, patch_size=patch_size)  # Extract patches
 
         # Save to disk
         _path_save = path_save_data.joinpath(f'wrap{wrap}')
@@ -62,7 +57,7 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
                 # Normalize to [0, 1]
                 _max = p.max()
                 _min = p.min()
-                if _max == _min:
+                if _max != _min:
                     p = (p - _min) / (_max - _min)
 
                     suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'

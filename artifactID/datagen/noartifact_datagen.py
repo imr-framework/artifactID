@@ -34,10 +34,9 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
                 pad.append((math.floor(p / 2), math.ceil(p / 2)))
             else:
                 pad.append((0, 0))
-
-        # Extract patches
         vol = np.pad(array=vol, pad_width=pad)
-        patches = get_patches(arr=vol, patch_size=patch_size)
+
+        patches = get_patches(arr=vol, patch_size=patch_size)  # Extract patches
 
         # Save to disk
         for counter, p in enumerate(patches):

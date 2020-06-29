@@ -120,7 +120,6 @@ def main(path_read_data: str, path_save_data: str, path_ktraj: str, path_dcf: st
         # Extract patches
         vol_b0 = np.pad(array=vol_b0, pad_width=pad)
         patches = get_patches(arr=vol_b0, patch_size=patch_size)
-        patches = patches.reshape((-1, patch_size, patch_size, patch_size)).astype(np.float16)
         arr_patches.extend(patches)
         arr_labels.extend([freq] * len(patches))
 
