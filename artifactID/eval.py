@@ -50,8 +50,6 @@ def main(batch_size: int, data_root: str, filter_artifact: str, model_load_path:
     # Get paths and labels
     x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
     dict_label_int = dict(zip(np.unique(y_labels), itertools.count(0)))  # Map labels to int
-    dict_label_int = {'b0_': 0, 'noartifact': 1, 'snr': 2, 'wrap': 3}  # TODO REMOVE
-    # y_true = np.array([dict_label_int[label] for label in y_labels])  # TODO REMOVE
     y_true = np.fromiter(map(lambda i: dict_label_int[i], y_labels), dtype=np.int8)  # Map labels to int
 
     # Split dataset
@@ -96,12 +94,11 @@ def main(batch_size: int, data_root: str, filter_artifact: str, model_load_path:
     with open(log_path, 'a') as file:
         time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
         write_str = f'\n{time_string} {accuracy * 100}% evaluation accuracy '
-        file.write(write_str)
         write_str += '\nConfusion matrix:\n'
         write_str += str(conf_matrix)
         write_str += '\n'
         write_str += str(dict_int_label)
-        write_str += '========='
+        write_str += '\n=========\n'
         file.write(write_str)
 
     # =========
