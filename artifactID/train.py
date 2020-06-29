@@ -31,7 +31,7 @@ mixed_precision.set_policy(policy)
 def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int,
          resume_training: str):
     # Make save destination
-    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
+    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
     if filter_artifact == 'none':  # Was this model trained on all or specific data?
         folder = Path('output') / f'{time_string}_all'
     else:
@@ -129,7 +129,13 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         model.summary(print_fn=lambda line: file.write(line + '\n'))
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
         pickle.dump(history.history, pkl)
-    model.save(str(folder / 'model.hdf5'))  # Save model
+
+    # Save model
+    if not resume_training:
+        model.save(str(folder / 'model.hdf5'))
+    else:
+        time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
+        model.save(str(folder / f'model_{time_string}.hdf5'))
 
 
 if __name__ == '__main__':
