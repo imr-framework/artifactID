@@ -11,7 +11,7 @@ import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, Flatten
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.models import Sequential, load_model
 
 from artifactID.common.data_ops import get_paths_labels
 from artifactID.common.data_ops import make_generator_train
@@ -28,7 +28,8 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int):
+def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int,
+         resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving model
     if filter_artifact == 'none':  # Was this model trained on all or specific data?
@@ -62,14 +63,17 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # MODEL
     # =========
     input_shape = (patch_size, patch_size, patch_size, 1)
-    model = Sequential()
-    model.add(Conv3D(filters=32, kernel_size=3, input_shape=input_shape, activation='relu'))
-    model.add(MaxPool3D())
-    model.add(Conv3D(filters=16, kernel_size=3, activation='relu'))
-    model.add(MaxPool3D())
-    model.add(Flatten())
-    model.add(Dense(units=len(np.unique(train_y_int)), activation='softmax'))
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    if resume_training is not None:  # Continue training pre-trained model
+        model = load_model(resume_training)
+    else:  # New model
+        model = Sequential()
+        model.add(Conv3D(filters=32, kernel_size=3, input_shape=input_shape, activation='relu'))
+        model.add(MaxPool3D())
+        model.add(Conv3D(filters=16, kernel_size=3, activation='relu'))
+        model.add(MaxPool3D())
+        model.add(Flatten())
+        model.add(Dense(units=len(np.unique(train_y_int)), activation='softmax'))
+        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     # =========
     # TRAINING
@@ -87,7 +91,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                  output_shapes=(tf.TensorShape(input_shape),
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
 
-    # Callback
+    # Model checkpoint callback - checkpoint after every epoch
     path_checkpoint = Path(folder) / 'model.{epoch:02d}.hdf5'
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=str(path_checkpoint),
                                                                    save_weights_only=False,
@@ -135,18 +139,24 @@ if __name__ == '__main__':
     config.read(path_settings)
 
     config_training = config['TRAIN']
-    batch_size = int(config_training['batch_size'])
-    epochs = int(config_training['epochs'])
-    filter_artifact = config_training['filter_artifact']
+    batch_size = int(config_training['batch_size'])  # Batch size
+    epochs = int(config_training['epochs'])  # Number of epochs
+    filter_artifact = config_training['filter_artifact']  # Train on all data/specific artifact
     filter_artifact = filter_artifact.lower()
-    patch_size = int(config_training['patch_size'])
-    path_data_root = config_training['path_read_data']
+    patch_size = int(config_training['patch_size'])  # Patch size
+    path_data_root = config_training['path_read_data']  # Path to training data
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-    random_seed = int(config_training['random_seed'])
+    random_seed = int(config_training['random_seed'])  # Seed for numpy.random
+    resume_training = config_training['resume_training']  # Resume training on pre-trained model
+    if resume_training == '':
+        resume_training = None
+    elif not Path(resume_training).exists():
+        raise Exception(f'{resume_training} does not exist. If you do not want to resume training, pass None.')
     main(batch_size=batch_size,
          data_root=path_data_root,
          epochs=epochs,
          filter_artifact=filter_artifact,
          patch_size=patch_size,
-         random_seed=random_seed)
+         random_seed=random_seed,
+         resume_training=resume_training)
