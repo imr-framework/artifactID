@@ -111,7 +111,8 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # =========
     # SAVE MODEL TO DISK
     # =========
-    if not resume_training:  # New training
+    # New training
+    if not resume_training:
         num_epochs = len(history.epoch)
         acc = history.history['accuracy'][-1]
         val_acc = history.history['val_accuracy'][-1]
@@ -130,7 +131,8 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
             model.summary(print_fn=lambda line: file.write(line + '\n'))
 
         model.save(str(folder / 'model.hdf5'))  # Save model
-    else:  # Resumed training
+    # Resumed training
+    else:
         num_epochs = len(history.epoch)
         acc = history.history['accuracy'][-1]
         val_acc = history.history['val_accuracy'][-1]
@@ -146,12 +148,9 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
 
         with open(str(folder / 'log.txt'), 'a') as file:  # Save training description
             file.write(write_str)
-            # Write model summary to file
-            file.write('\n\n')
-            model.summary(print_fn=lambda line: file.write(line + '\n'))
 
         time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
-        model.save(str(folder / f'model_{time_string}.hdf5'))
+        model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
 
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
         pickle.dump(history.history, pkl)
@@ -177,7 +176,9 @@ if __name__ == '__main__':
     if resume_training == '':
         resume_training = None
     elif not Path(resume_training).exists():
-        raise Exception(f'{resume_training} does not exist. If you do not want to resume training, pass None.')
+        raise Exception(
+            f'{resume_training} does not exist. If you do not want to resume training on a pre-trained model,'
+            f'leave the parameter empty.')
     main(batch_size=batch_size,
          data_root=path_data_root,
          epochs=epochs,
