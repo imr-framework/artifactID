@@ -1,18 +1,16 @@
-
 import math
+from pathlib import Path
+
+import cv2
 import numpy as np
 from PIL import Image
-import matplotlib.pyplot as plt
-import cv2
-
-from pathlib import Path
 from tqdm import tqdm
 
 from artifactID.common.data_ops import glob_brats_t1, glob_nifti, load_nifti_vol, get_patches
 
-def main(path_read_data: str, path_save_data: str, patch_size: int):
-    arr_rot_range = np.hstack((np.arange(-15,0), np.arange(1, 16)))
 
+def main(path_read_data: str, path_save_data: str, patch_size: int):
+    arr_rot_range = np.hstack((np.arange(-15, 0), np.arange(1, 16)))
 
     # =========
     # PATHS
@@ -39,10 +37,9 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         vol_norm = cv2.normalize(vol, vol_norm, 0, 255, cv2.NORM_MINMAX)
         vol_rot = np.zeros(vol.shape)
         for sl in range(vol_norm.shape[-1]):
-            slice = Image.fromarray(vol_norm[:,:,sl])
+            slice = Image.fromarray(vol_norm[:, :, sl])
             slice_rot = slice.rotate(rot)
-            vol_rot[:,:,sl] = slice_rot
-
+            vol_rot[:, :, sl] = slice_rot
 
         # Zero pad to compatible shape
         pad = []
@@ -66,15 +63,16 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for counter, p in enumerate(patches):
-            if np.sum(p) != 0:  # Discard empty patches
+            if np.count_nonzero(p) == 0 or p.max() == p.min():  # Discard empty patches
+                pass
+            else:
                 # Normalize to [0, 1]
                 _max = p.max()
                 _min = p.min()
-                if _max == _min:
-                    p = (p - _min) / (_max - _min)
+                p = (p - _min) / (_max - _min)
 
-                    suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
-                    subject = path_t1.name.replace(suffix, '')
-                    _path_save2 = _path_save.joinpath(subject)
-                    _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-                    np.save(arr=p, file=_path_save2)
+                suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+                subject = path_t1.name.replace(suffix, '')
+                _path_save2 = _path_save.joinpath(subject)
+                _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+                np.save(arr=p, file=_path_save2)

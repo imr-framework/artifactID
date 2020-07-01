@@ -40,15 +40,16 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
 
         # Save to disk
         for counter, p in enumerate(patches):
-            if np.sum(p) != 0:  # Discard empty patches
+            if np.count_nonzero(p) == 0 or p.max() == p.min():  # Discard empty patches
+                continue
+            else:
                 # Normalize to [0, 1]
                 _max = p.max()
                 _min = p.min()
-                if _max != _min:
-                    p = (p - _min) / (_max - _min)
+                p = (p - _min) / (_max - _min)
 
-                    suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
-                    subject = path_t1.name.replace(suffix, '')
-                    _path_save = path_save_data.joinpath(subject)
-                    _path_save = str(_path_save) + f'_patch{counter}.npy'
-                    np.save(arr=p, file=_path_save)
+                suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+                subject = path_t1.name.replace(suffix, '')
+                _path_save = path_save_data.joinpath(subject)
+                _path_save = str(_path_save) + f'_patch{counter}.npy'
+                np.save(arr=p, file=_path_save)
