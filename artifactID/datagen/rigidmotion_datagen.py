@@ -11,6 +11,7 @@ from artifactID.common.data_ops import glob_brats_t1, glob_nifti, load_nifti_vol
 
 def main(path_read_data: str, path_save_data: str, patch_size: int):
     arr_rot_range = np.hstack((np.arange(-15, 0), np.arange(1, 16)))
+    arr_rot_range = list(arr_rot_range)
 
     # =========
     # PATHS
