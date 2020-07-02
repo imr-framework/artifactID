@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+from OCTOPUS.Recon import ORC
 
 def _bin_five(field_map: np.ndarray, freq_offset: float):
     bins = np.arange(-freq_offset, freq_offset, 5)
@@ -84,6 +85,87 @@ def find_nearest(array, value):
 
     return idx
 
+def parabola_formula(N: int):
+    """
+    Parabola values to fit an image of N rows/columns
+
+    Parameters
+    ----------
+    N :  int
+        Matrix size
+
+    Returns
+    -------
+    yaxis : numpy.ndarray
+        y axis values of the parabola
+    """
+    x1, y1 = -N / 10, 0.5
+    x2, y2 = 0, 0
+    x3, y3 = N / 10, 0.5
+
+    denom = (x1 - x2) * (x1 - x3) * (x2 - x3)
+    A = (x3 * (y2 - y1) + x2 * (y1 - y3) + x1 * (y3 - y2)) / denom
+    B = (x3 * x3 * (y1 - y2) + x2 * x2 * (y3 - y1) + x1 * x1 * (y2 - y3)) / denom
+    C = (x2 * x3 * (x2 - x3) * y1 + x3 * x1 * (x3 - x1) * y2 + x1 * x2 * (x1 - x2) * y3) / denom
+
+    y = lambda x: A * x ** 2 + B * x + C
+    yaxis = y(np.arange(-N / 2, N / 2, 1)).reshape(1, N)
+
+    return yaxis
+def fieldmap_bin(field_map: np.ndarray, bin : int):
+    '''
+    Bins a given field map given a binning value
+
+    Parameters
+    ----------
+    field_map : numpy.ndarray
+        Field map matrix in Hz
+    bin : int
+        Binning value in Hz
+
+    Returns
+    -------
+    binned_field_map : numpy.ndarray
+        Binned field map matrix
+    '''
+    fmax = field_map.max()
+    bins = np.arange(-fmax, fmax + bin, bin)
+    binned_field_map = np.zeros(field_map.shape)
+    for x in range(field_map.shape[0]):
+        for y in range(field_map.shape[1]):
+            idx = ORC.find_nearest(bins, field_map[x, y])
+            binned_field_map[x, y] = bins[idx]
+
+    return binned_field_map
+def hyperbolic(N: int, fmax : float, bin_opt : bool = True,  bin_val : int = 5):
+    """
+    Creates a hyperbolic field map
+
+    Parameters
+    ----------
+    N : int
+       Field map dimensions (NxN)
+    fmax : float
+       Frequency range in Hz
+    bin_opt : bool
+        Binning option. Default is True
+    bin_val : int
+        Binning value, default is 5 Hz
+
+
+    Returns
+    -------
+    field map : numpy.ndarray
+       Field map matrix with dimensions [NxN] and scaled from -fmax to +fmax Hz
+    """
+    y = parabola_formula(N)
+    rows = np.tile(y, (N, 1))
+    field_map_mat = rows - rows.T
+    dst = np.zeros(field_map_mat.shape)
+    field_map = cv2.normalize(field_map_mat, dst, -fmax, fmax, cv2.NORM_MINMAX)
+    if bin_opt:
+        field_map = fieldmap_bin(field_map, bin_val)
+    return field_map
 
 '''
 plt.subplot(1, 3, 1)
