@@ -118,6 +118,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         val_acc = history.history['val_accuracy'][-1]
         write_str = f'{filter_artifact} data\n' \
                     f'{path_data_root}\n' \
+                    f'{dict_label_int}\n' \
                     f'{dur} seconds\n' \
                     f'{batch_size} batch size\n' \
                     f'{num_epochs} epochs\n' \
@@ -139,6 +140,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         write_str = f'Resumed training\n' \
                     f'{filter_artifact} data\n' \
                     f'{path_data_root}\n' \
+                    f'{dict_label_int}\n' \
                     f'{dur} seconds\n' \
                     f'{batch_size} batch size\n' \
                     f'{num_epochs} epochs\n' \
