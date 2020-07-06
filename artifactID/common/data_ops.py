@@ -61,11 +61,11 @@ def get_patches(arr: np.ndarray, patch_size: int):
 
 def get_paths_labels(data_root: str, filter_artifact: str):
     # Construct `x` and `y` training pairs
-    if filter_artifact in ['b0', 'snr', 'wrap']:
+    if filter_artifact in ['b0', 'gibbs', 'nrm', 'rot', 'snr', 'wrap']:
         glob_pattern = filter_artifact + '*'
     else:
-        warning = f'Unknown value for filter_artifact. Valid values are b0, snr and wrap. ' \
-                  f'You passed: {filter_artifact}. Globbing all data.'
+        warning = f'Unknown value for filter_artifact. Valid values are b0, snr, wrap and rot.'
+        warning += f'You passed: {filter_artifact}. Globbing all data.'
         warn(warning)
         glob_pattern = '*'
 
@@ -77,7 +77,7 @@ def get_paths_labels(data_root: str, filter_artifact: str):
         x_paths.extend(files)
         label = artifact_folder.name
         if glob_pattern == '*':
-            label = label.rstrip('0123456789')
+            label = label.rstrip('0123456789').rstrip('-_')
         y_labels.extend([label] * len(files))
 
     return np.array(x_paths), np.array(y_labels)

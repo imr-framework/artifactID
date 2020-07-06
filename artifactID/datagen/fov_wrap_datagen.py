@@ -46,36 +46,39 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         # Now extract the overlapping regions
         # This is because the central unmodified region should not be classified as FOV wrap-around artifact
         top, bottom = middle[:wrap], middle[-wrap:]
-        vol = np.append(top, bottom, axis=0)
 
-        # Zero pad to compatible shape
-        pad = []
-        shape = vol.shape
-        for s in shape:
-            if s % patch_size != 0:
-                p = patch_size - (s % patch_size)
-                pad.append((math.floor(p / 2), math.ceil(p / 2)))
-            else:
-                pad.append((0, 0))
-        vol = np.pad(array=vol, pad_width=pad)
+        # Now cycle through top and bottom chunks individually
+        counter = 0
+        for vol in (top, bottom):
+            # Zero pad to compatible shape
+            pad = []
+            shape = vol.shape
+            for s in shape:
+                if s % patch_size != 0:
+                    p = patch_size - (s % patch_size)
+                    pad.append((math.floor(p / 2), math.ceil(p / 2)))
+                else:
+                    pad.append((0, 0))
+            vol = np.pad(array=vol, pad_width=pad)
 
-        patches = get_patches(arr=vol, patch_size=patch_size)  # Extract patches
+            patches = get_patches(arr=vol, patch_size=patch_size)  # Extract patches
 
-        # Save to disk
-        _path_save = path_save_data.joinpath(f'wrap{wrap}')
-        if not _path_save.exists():
-            _path_save.mkdir(parents=True)
-        for counter, p in enumerate(patches):
-            if np.count_nonzero(p) == 0 or p.max() == p.min():  # Discard empty patches
-                continue
-            else:
-                # Normalize to [0, 1]
-                _max = p.max()
-                _min = p.min()
-                p = (p - _min) / (_max - _min)
+            # Save to disk
+            _path_save = path_save_data.joinpath(f'wrap{wrap}')
+            if not _path_save.exists():
+                _path_save.mkdir(parents=True)
+            for p in patches:
+                if np.count_nonzero(p) == 0 or p.max() == p.min():  # Discard empty patches
+                    continue
+                else:
+                    # Normalize to [0, 1]
+                    _max = p.max()
+                    _min = p.min()
+                    p = (p - _min) / (_max - _min)
 
-                suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
-                subject = path_t1.name.replace(suffix, '')
-                _path_save2 = _path_save.joinpath(subject)
-                _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-                np.save(arr=p, file=_path_save2)
+                    suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+                    subject = path_t1.name.replace(suffix, '')
+                    _path_save2 = _path_save.joinpath(subject)
+                    _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+                    np.save(arr=p, file=_path_save2)
+                    counter += 1
