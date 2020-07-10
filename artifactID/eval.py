@@ -123,9 +123,9 @@ if __name__ == '__main__':
     path_data_root = config_eval['path_read_data']
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-    path_save_model = config_eval['path_pretrained_model']
-    if '.hdf5' not in path_save_model:
-        path_save_model += '.hdf5'
+    path_pretrained_model = config_eval['path_pretrained_model']
+    if '.hdf5' not in path_pretrained_model:
+        path_pretrained_model += '.hdf5'
     random_seed = int(config_eval['random_seed'])
     main(batch_size=batch_size, data_root=path_data_root, filter_artifact=filter_artifact,
-         model_load_path=path_save_model, patch_size=patch_size, random_seed=random_seed)
+         model_load_path=path_pretrained_model, patch_size=patch_size, random_seed=random_seed)

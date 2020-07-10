@@ -55,7 +55,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     y_int = np.delete(y_int, test_idx)
 
     # Train-val split
-    val_pc = 0.1
+    val_pc = 0.10
     split = train_test_split(x_paths, y_int, test_size=val_pc, shuffle=True)
     train_x_paths, val_x_paths, train_y_int, val_y_int = split
 
