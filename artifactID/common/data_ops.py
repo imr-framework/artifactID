@@ -1,50 +1,10 @@
+import math
 from pathlib import Path
 from warnings import warn
 
 import nibabel as nb
 import numpy as np
 from skimage.util.shape import view_as_blocks
-
-
-def glob_nifti(path: str):
-    path = Path(path)
-    arr_path = list(path.glob('**/*.nii.gz'))
-    arr_path2 = list(path.glob('**/*.nii'))
-    return arr_path + arr_path2
-
-
-def glob_brats_t1(path_brats: str):
-    path_brats = Path(path_brats)
-    arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
-    arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
-    return arr_path_brats_t1
-
-
-def load_nifti_vol(path: str):
-    """
-    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal.
-
-    1. Ensure correct orientation of the brain
-    2. Normalize between 0-1
-
-    Parameters
-    ==========
-    path : str
-        Path to NIFTI file to be read.
-
-    Returns
-    =======
-    numpy.ndarray
-        3D array of NIFTI file at `path`.
-    """
-    vol = nb.load(path).get_fdata()
-    vol = np.rot90(vol, -1, axes=(0, 1))  # Ensure correct orientation
-    filter_5pc = lambda x: np.count_nonzero(x) > 0.05 * x.size
-    slice_content_idx = [filter_5pc(vol[:, :, i]) for i in
-                         range(vol.shape[2])]  # Get indices of slices with >=5% signal
-    vol = vol[:, :, slice_content_idx]
-    vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
-    return vol
 
 
 def get_patches(arr: np.ndarray, patch_size: int):
@@ -87,6 +47,47 @@ def get_paths(data_root: str):
     files = list(Path(data_root).glob('**/*'))
     files = list(map(lambda x: str(x), files))  # Convert from Path to str
     return np.array(files)
+
+
+def glob_nifti(path: str):
+    path = Path(path)
+    arr_path = list(path.glob('**/*.nii.gz'))
+    arr_path2 = list(path.glob('**/*.nii'))
+    return arr_path + arr_path2
+
+
+def glob_brats_t1(path_brats: str):
+    path_brats = Path(path_brats)
+    arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
+    arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
+    return arr_path_brats_t1
+
+
+def load_nifti_vol(path: str):
+    """
+    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal.
+
+    1. Ensure correct orientation of the brain
+    2. Normalize between 0-1
+
+    Parameters
+    ==========
+    path : str
+        Path to NIFTI file to be read.
+
+    Returns
+    =======
+    numpy.ndarray
+        3D array of NIFTI file at `path`.
+    """
+    vol = nb.load(path).get_fdata()
+    vol = np.rot90(vol, -1, axes=(0, 1))  # Ensure correct orientation
+    filter_5pc = lambda x: np.count_nonzero(x) > 0.05 * x.size
+    slice_content_idx = [filter_5pc(vol[:, :, i]) for i in
+                         range(vol.shape[2])]  # Get indices of slices with >=5% signal
+    vol = vol[:, :, slice_content_idx]
+    vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
+    return vol
 
 
 def make_generator_train(x, y):
@@ -142,3 +143,37 @@ def make_generator_inference(x):
         _x = np.load(x[counter])  # Load volume
         _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
         yield _x
+
+
+def prune_patches(patches):
+    patch_map = []
+    arr_patches = []
+    for p in patches:
+        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
+            patch_map.append(0)
+        else:  # Valid patch
+            arr_patches.append(p)
+            patch_map.append(1)
+    return arr_patches, patch_map
+
+
+def normalize_patches(patches):
+    arr_patches = []
+    for p in patches:
+        _max = p.max()
+        _min = p.min()
+        p = (p - _min) / (_max - _min)
+        arr_patches.append(p)
+    return arr_patches
+
+
+def patch_compatible_zeropad(vol, patch_size):
+    pad = []
+    shape = vol.shape
+    for s in shape:
+        if s % patch_size != 0:
+            p = patch_size - (s % patch_size)
+            pad.append((math.floor(p / 2), math.ceil(p / 2)))
+        else:
+            pad.append((0, 0))
+    return np.pad(array=vol, pad_width=pad)

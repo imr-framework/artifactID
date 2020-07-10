@@ -1,14 +1,14 @@
 import math
 from pathlib import Path
-from tqdm import tqdm
+
 import cv2
 import numpy as np
 import scipy.io as sio
-
-
-from artifactID.datagen import generate_fieldmap
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches, glob_nifti
 from OCTOPUS.Recon import ORC
+from tqdm import tqdm
+
+from artifactID.common import data_ops
+from artifactID.datagen import generate_fieldmap
 
 
 def _gen_fieldmap(_slice, _freq_range, _ktraj, _seq_params):
@@ -49,9 +49,8 @@ def orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.ndarray, seq_pa
         or_corrupted_norm = np.zeros(or_corrupted.shape)
         or_corrupted_norm = cv2.normalize(np.abs(or_corrupted), or_corrupted_norm, 0, 1,
                                           cv2.NORM_MINMAX)  # Normalize [0, 1]
-        arr_offres_vol[:,:,ind] = np.float16(or_corrupted_norm * mask)
+        arr_offres_vol[:, :, ind] = np.float16(or_corrupted_norm * mask)
 
-    #arr_offres_vol = np.stack(arr_offres_vol)
     return arr_offres_vol
 
 
@@ -73,9 +72,9 @@ def main(path_read_data: str, path_save_data: str, path_ktraj: str, path_dcf: st
 
     # BraTS 2018 paths
     if 'miccai' in path_read_data.lower():
-        arr_path_read = glob_brats_t1(path_brats=path_read_data)
+        arr_path_read = data_ops.glob_brats_t1(path_brats=path_read_data)
     else:
-        arr_path_read = glob_nifti(path=path_read_data)
+        arr_path_read = data_ops.glob_nifti(path=path_read_data)
     path_save_data = Path(path_save_data)
 
     arr_max_freq = [250, 500, 750]  # Hz
@@ -83,68 +82,26 @@ def main(path_read_data: str, path_save_data: str, path_ktraj: str, path_dcf: st
     arr_max_freq *= subjects_per_class
     np.random.shuffle(arr_max_freq)
 
-    '''path_save = Path(path_save)
-    path_all = [path_save / f'b0_{freq}' for freq in arr_max_freq]
-    # Make save folders if they do not exist
-    for p in path_all:
-        if not p.exists():
-            p.mkdir(parents=True)'''
-
     # =========
     # DATAGEN
     # =========
-    arr_patches = []
-    arr_labels = []
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
-        '''pc = round((ind + 1) / num_subjects * 100, ndigits=2)
-        print(f'{pc}%', end=', ', flush=True)'''
-
-        vol = load_nifti_vol(path=path_t1)
+        vol = data_ops.load_nifti_vol(path=path_t1)
         freq = arr_max_freq[ind]
         vol_b0 = orc_forwardmodel(vol=vol, freq_range=freq, ktraj=ktraj, seq_params=seq_params)
-        #vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
 
-        # Zero pad back to 155
-        '''orig_num_slices = 155
-        n_zeros = (orig_num_slices - vol_b0.shape[2]) / 2
-        n_zeros = [math.floor(n_zeros), math.ceil(n_zeros)]
-        vol_b0 = np.pad(vol_b0, [[0, 0], [0, 0], n_zeros])'''
+        # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
+        vol_b0 = data_ops.patch_compatible_zeropad(vol=vol_b0, patch_size=patch_size)
+        patches = data_ops.get_patches(arr=vol_b0, patch_size=patch_size)
+        patches, patch_map = data_ops.prune_patches(patches=patches)
+        patches = data_ops.normalize_patches(patches=patches)
 
-        # Zero pad to compatible shape
-        pad = []
-        shape = vol_b0.shape
-        for s in shape:
-            if s % patch_size != 0:
-                p = patch_size - (s % patch_size)
-                pad.append((math.floor(p / 2), math.ceil(p / 2)))
-            else:
-                pad.append((0, 0))
-
-        # Extract patches
-        vol_b0 = np.pad(array=vol_b0, pad_width=pad)
-        patches = get_patches(arr=vol_b0, patch_size=patch_size)
-        arr_patches.extend(patches)
-        arr_labels.extend([freq] * len(patches))
-
+        # Save to disk
         _path_save = path_save_data.joinpath(f'b0{freq}')
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for counter, p in enumerate(patches):
-
             subject = path_t1.name.replace('.nii.gz', '')
             _path_save2 = _path_save.joinpath(subject)
-            if np.count_nonzero(p) == 0 or p.min() == p.max():
-               pass
-            else:
-                # Normalize to [0, 1]
-                _max = p.max()
-                _min = p.min()
-                p = (p - _min) / (_max - _min)
-
-                _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-                np.save(arr=p, file=_path_save2)
-
-        '''subject_name = path_t1.parts[-1].split('.nii.gz')[0]  # Extract subject name from path
-        _path_save = str(path_save / f'b0_{freq}' / subject_name) + '.npy'
-        np.save(arr=vol_b0, file=_path_save)'''
-        # print('Corrupted data saved for subject:' + folder_name)
+            _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+            np.save(arr=p, file=_path_save2)
