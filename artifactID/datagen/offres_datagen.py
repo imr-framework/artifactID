@@ -95,8 +95,8 @@ def main(path_read_data: str, path_save_data: str, path_ktraj: str, path_dcf: st
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_b0 = data_ops.patch_compatible_zeropad(vol=vol_b0, patch_size=patch_size)
-        patches = data_ops.get_patches(arr=vol_b0, patch_size=patch_size)
-        patches, patch_map = data_ops.prune_patches(patches=patches)
+        patches, original_shape = data_ops.get_patches(arr=vol_b0, patch_size=patch_size)
+        patches, patch_map = data_ops.prune_patches(patches=patches, original_shape=original_shape)
         patches = data_ops.normalize_patches(patches=patches)
 
         # Save to disk
