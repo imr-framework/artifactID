@@ -3,11 +3,13 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from OCTOPUS.Recon import ORC
-from tqdm import tqdm
+import scipy.io as sio
+import matplotlib.pyplot as plt
 
 from artifactID.common import data_ops
 from artifactID.datagen import generate_fieldmap
+from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches, glob_nifti
+from OCTOPUS import ORC
 
 
 def _gen_fieldmap(_slice, _freq_range):
@@ -16,7 +18,7 @@ def _gen_fieldmap(_slice, _freq_range):
     return field_map
 
 
-def orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.ndarray):
+def orc_forwardmodel(vol: np.ndarray, fieldmap: int, ktraj: np.ndarray):
     """
     Adds off-resonance blurring to simulate B0 inhomogeneity artifacts.
 
@@ -43,7 +45,8 @@ def orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.ndarray):
     for ind in range(num_slices):
         slice = vol[:, :, ind]
 
-        fieldmap = _gen_fieldmap(_slice=slice, _freq_range=freq_range)
+
+        #fieldmap= _gen_fieldmap(_slice=slice, _freq_range=freq_range)
         or_corrupted = ORC.add_or_CPR(slice, ktraj, fieldmap)  # Corrupt the image
 
         or_corrupted_norm = np.zeros(or_corrupted.shape)
@@ -59,8 +62,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     # =========
     # LOAD PREREQUISITES
     # =========
-    # 1. k-space trajectory
-    dt = 10e-6  # grad raster time
 
     # BraTS 2018 paths
     if 'miccai' in path_read_data.lower():
@@ -69,31 +70,33 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         arr_path_read = data_ops.glob_nifti(path=path_read_data)
     path_save_data = Path(path_save_data)
 
-    arr_max_freq = [2500, 5000, 7500]  # Hz
+    arr_max_freq = [1600, 3200, 4800]  # Hz
     subjects_per_class = math.ceil(len(arr_path_read) / len(arr_max_freq))  # Calculate number of subjects per class
     arr_max_freq *= subjects_per_class
     np.random.shuffle(arr_max_freq)
 
-    '''path_save = Path(path_save)
-    path_all = [path_save / f'b0_{freq}' for freq in arr_max_freq]
-    # Make save folders if they do not exist
-    for p in path_all:
-        if not p.exists():
-            p.mkdir(parents=True)'''
 
     # =========
     # DATAGEN
     # =========
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
 
-        vol = data_ops.load_nifti_vol(path=path_t1)
+        vol = load_nifti_vol(path=path_t1)
+        freq = arr_max_freq[ind]
 
         N = vol.shape[0]
+        # 1. k-space trajectory and field map
+        dt = 10e-6  # grad raster time
         ktraj_cart = np.arange(0, N * dt, dt).reshape(1, N)
         ktraj = np.tile(ktraj_cart, (N, 1))
+        field_map = generate_fieldmap.hyperbolic(N, freq)  # Simulate the field map
 
-        freq = arr_max_freq[ind]
-        vol_b0 = orc_forwardmodel(vol=vol, freq_range=freq, ktraj=ktraj)
+
+        vol_b0 = orc_forwardmodel(vol=vol, fieldmap=field_map, ktraj=ktraj)
+        #vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        plt.imshow(vol_b0[:,:,58],cmap='gray')
+        plt.title(str(freq))
+        plt.show()
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_b0 = data_ops.patch_compatible_zeropad(vol=vol_b0, patch_size=patch_size)

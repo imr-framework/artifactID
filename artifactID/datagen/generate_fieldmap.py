@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from OCTOPUS.Recon import ORC
+from OCTOPUS import ORC
 
 def _bin_five(field_map: np.ndarray, freq_offset: float):
     bins = np.arange(-freq_offset, freq_offset, 5)

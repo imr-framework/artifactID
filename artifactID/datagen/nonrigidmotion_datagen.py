@@ -47,10 +47,11 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         kdat_trans = np.fft.fftshift(np.fft.fftn(vol_trans))
         kdat_nrm = np.fft.fftshift(np.fft.fftn(vol_norm))
 
-        random_lines = np.random.randint(0, 240, 100)
+        random_lines = np.random.randint(0,vol.shape[0], 100)
         if trans_direction == 0:
-            kdat_nrm[random_lines[:50], :, :] = kdat_rot[random_lines[:50], :, :]
-            kdat_nrm[random_lines[50:], :, :] = kdat_trans[random_lines[50:], :, :]
+        # TODO: remove hard coded numbers
+            kdat_nrm[random_lines[:50],:, :] = kdat_rot[random_lines[:50], :,:]
+            kdat_nrm[random_lines[50:], :, :] = kdat_trans[random_lines[50:],:, :]
             kdat_nrm[110:130, :, :] = kdat_orig[110:130, :, :]
         else:
             kdat_nrm[:, random_lines[:50], :] = kdat_rot[:, random_lines[:50], :]
