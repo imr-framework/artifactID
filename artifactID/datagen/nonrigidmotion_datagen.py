@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import cv2
+import math
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
@@ -24,6 +25,7 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
 
         vol = data_ops.load_nifti_vol(path=path_t1)
+        N = vol.shape[0]
         vol_norm = np.zeros(vol.shape)
         vol_norm = cv2.normalize(vol, vol_norm, 0, 255, cv2.NORM_MINMAX)
 
@@ -47,16 +49,18 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         kdat_trans = np.fft.fftshift(np.fft.fftn(vol_trans))
         kdat_nrm = np.fft.fftshift(np.fft.fftn(vol_norm))
 
-        random_lines = np.random.randint(0,vol.shape[0], 100)
+        kspace_center = math.ceil(N * 0.04)
+        center_lines = range(int(N / 2) - kspace_center, int(N / 2) + kspace_center)
+        random_lines = np.random.randint(0, N, int((N - 2 * kspace_center)/2))
         if trans_direction == 0:
         # TODO: remove hard coded numbers
-            kdat_nrm[random_lines[:50],:, :] = kdat_rot[random_lines[:50], :,:]
-            kdat_nrm[random_lines[50:], :, :] = kdat_trans[random_lines[50:],:, :]
-            kdat_nrm[110:130, :, :] = kdat_orig[110:130, :, :]
+            kdat_nrm[random_lines[:int(len(random_lines)/2)],:, :] = kdat_rot[random_lines[:int(len(random_lines)/2)], :,:]
+            kdat_nrm[random_lines[int(len(random_lines)/2):], :, :] = kdat_trans[random_lines[int(len(random_lines)/2):],:, :]
+            kdat_nrm[center_lines, :, :] = kdat_orig[center_lines, :, :]
         else:
-            kdat_nrm[:, random_lines[:50], :] = kdat_rot[:, random_lines[:50], :]
-            kdat_nrm[:, random_lines[50:], :] = kdat_trans[:, random_lines[50:], :]
-            kdat_nrm[:, 110:130, :] = kdat_orig[:, 110:130, :]
+            kdat_nrm[:, random_lines[:int(len(random_lines)/2)], :] = kdat_rot[:, random_lines[:int(len(random_lines)/2)], :]
+            kdat_nrm[:, random_lines[int(len(random_lines)/2):], :] = kdat_trans[:, random_lines[int(len(random_lines)/2):], :]
+            kdat_nrm[:, center_lines, :] = kdat_orig[:, center_lines, :]
 
         vol_nrm = np.abs(np.fft.ifftn(np.fft.ifftshift(kdat_nrm)))
 

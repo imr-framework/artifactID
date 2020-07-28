@@ -1,7 +1,64 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 from OCTOPUS import ORC
+from OCTOPUS.Fieldmap.fieldmap_gen import fieldmap_bin
+def realistic(N, fmax , bin_opt = True, bin_val = 5):
+    """
+    Creates a realistic field map
+
+    Parameters
+    ----------
+    N : int
+        Matrix size
+    fmax : float
+       Frequency range in Hz
+    bin_opt : bool
+        Binning option. Default is True
+    bin_val : int
+        Binning value, default is 5 Hz
+
+    Returns
+    -------
+    field_map : numpy.ndarray
+        Field map matrix with dimensions same as im and scaled from -fmax to +fmax Hz
+    """
+    '''if im.shape[0] != im.shape[1]:
+        raise ValueError('Images have to be squared (NxN)')
+
+    N = im.shape[0]
+    hist = np.histogram(im)
+    mask1= cv2.threshold(im, hist[1][hist[0].argmax()+1], 1, cv2.THRESH_BINARY)
+    #mask2 = cv2.threshold(im, hist[1][hist[0].argmax()], 1, cv2.THRESH_BINARY_INV)
+    mask = mask1[1] #+ mask2[1]'''
+
+    M = np.random.rand(2, 2)
+    M2 = cv2.resize(M, (N, N))
+
+
+    dst = np.zeros(M2.shape)
+
+
+    if bin_opt:
+        field_map = fieldmap_bin(M2, 0.01)
+    field_map = cv2.normalize(field_map, dst, -fmax, fmax, cv2.NORM_MINMAX)# * mask
+    return field_map
+
+def mask_fieldmap(vol, fieldmap_sl):
+    N = vol.shape[0]
+    Nslices = vol.shape[-1]
+
+    masked_fieldmap = np.zeros(vol.shape)
+    for sl in range(Nslices):
+        im = vol[:,:,sl]
+        hist = np.histogram(im)
+        mask = cv2.threshold(im, hist[1][hist[0].argmax() + 1], 1, cv2.THRESH_BINARY)
+        masked_fieldmap[:,:,sl] = fieldmap_sl * mask[1]
+    plt.imshow(masked_fieldmap[:,:,58])
+    plt.colorbar()
+    plt.show()
+    return masked_fieldmap
 
 def _bin_five(field_map: np.ndarray, freq_offset: float):
     bins = np.arange(-freq_offset, freq_offset, 5)

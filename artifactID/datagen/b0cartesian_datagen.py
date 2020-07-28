@@ -1,37 +1,29 @@
 import math
 from pathlib import Path
-
+from tqdm import tqdm
 import cv2
 import numpy as np
-import scipy.io as sio
 import matplotlib.pyplot as plt
 
 from artifactID.common import data_ops
 from artifactID.datagen import generate_fieldmap
 from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches, glob_nifti
 from OCTOPUS import ORC
+from OCTOPUS.Fieldmap.fieldmap_gen import realistic
 
 
-def _gen_fieldmap(_slice, _freq_range):
-    field_map = generate_fieldmap.hyperbolic(_slice.shape[0], _freq_range)  # Simulate the field map
-
-    return field_map
-
-
-def orc_forwardmodel(vol: np.ndarray, fieldmap: int, ktraj: np.ndarray):
+def orc_forwardmodel(vol: np.ndarray, ktraj: np.ndarray,  fieldmap):
     """
     Adds off-resonance blurring to simulate B0 inhomogeneity artifacts.
 
     Parameters
     ==========
     vol : numpy.ndarray
-        Image volume having dimensions N x N x N number of slices
-    freq_range : int
-        Frequency range for the simulated field map
+        Image volume having dimensions N x N x number of slices
     ktraj : numpy.ndarray
         k-space trajectory coordinates. Dimensions Npoints x Nshots
-    seq_params : dict
-        Sequence parameters needed for off-resonance corruption
+    fieldmap : numpy.ndarray
+        Frequency field map with dimensions N x N x Nslices
 
     Returns
     =======
@@ -44,10 +36,10 @@ def orc_forwardmodel(vol: np.ndarray, fieldmap: int, ktraj: np.ndarray):
 
     for ind in range(num_slices):
         slice = vol[:, :, ind]
+        fieldmap_sl = fieldmap[:,:,ind]
 
 
-        #fieldmap= _gen_fieldmap(_slice=slice, _freq_range=freq_range)
-        or_corrupted = ORC.add_or_CPR(slice, ktraj, fieldmap)  # Corrupt the image
+        or_corrupted = ORC.add_or_CPR(slice, ktraj, fieldmap_sl)  # Corrupt the image
 
         or_corrupted_norm = np.zeros(or_corrupted.shape)
         or_corrupted_norm = cv2.normalize(np.abs(or_corrupted), or_corrupted_norm, 0, 1,
@@ -89,13 +81,20 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         dt = 10e-6  # grad raster time
         ktraj_cart = np.arange(0, N * dt, dt).reshape(1, N)
         ktraj = np.tile(ktraj_cart, (N, 1))
-        field_map = generate_fieldmap.hyperbolic(N, freq)  # Simulate the field map
+        #field_map = generate_fieldmap.hyperbolic(N, freq)  # Simulate the field map
+        field_map = generate_fieldmap.realistic(N, freq)
 
+        masked_fieldmap = generate_fieldmap.mask_fieldmap(vol, field_map)
 
-        vol_b0 = orc_forwardmodel(vol=vol, fieldmap=field_map, ktraj=ktraj)
+        vol_b0 = orc_forwardmodel(vol=vol, ktraj=ktraj, fieldmap=masked_fieldmap)
         #vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        plt.subplot(131)
+        plt.imshow(vol[:,:,58], cmap='gray')
+        plt.subplot(132)
         plt.imshow(vol_b0[:,:,58],cmap='gray')
         plt.title(str(freq))
+        plt.subplot(133)
+        plt.imshow(vol[:,:,58] - vol_b0[:,:,58], cmap='gray')
         plt.show()
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch

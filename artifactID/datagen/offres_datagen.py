@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import scipy.io as sio
-from OCTOPUS.Recon import ORC
+
 from tqdm import tqdm
 
 from artifactID.common import data_ops
@@ -14,7 +14,7 @@ from OCTOPUS import ORC
 
 
 
-def _gen_fieldmap(_slice, _freq_range, _ktraj, _seq_params):
+def _gen_fieldmap(_slice, _freq_range):
     field_map, mask = generate_fieldmap.gen_smooth_b0(_slice, _freq_range)  # Simulate the field map
 
     return field_map, mask
@@ -47,7 +47,7 @@ def orc_forwardmodel(vol: np.ndarray, freq_range: int, ktraj: np.ndarray, seq_pa
 
     for ind in range(num_slices):
         slice = vol[:, :, ind]
-        fieldmap, mask = _gen_fieldmap(_slice=slice, _freq_range=freq_range, _ktraj=ktraj, _seq_params=seq_params)
+        fieldmap, mask = _gen_fieldmap(_slice=slice, _freq_range=freq_range)
         or_corrupted = ORC.add_or_CPR(slice, ktraj, fieldmap, 1, seq_params)  # Corrupt the image
         or_corrupted_norm = np.zeros(or_corrupted.shape)
         or_corrupted_norm = cv2.normalize(np.abs(or_corrupted), or_corrupted_norm, 0, 1,
