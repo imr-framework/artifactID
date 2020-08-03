@@ -4,7 +4,28 @@ from warnings import warn
 
 import nibabel as nb
 import numpy as np
+import pydicom as pyd
 from skimage.util.shape import view_as_blocks
+from tqdm import tqdm
+
+
+def dcmfolder2npy(path: Path, verbose: bool = True):
+    if not isinstance(path, Path):
+        path = Path(path)
+
+    arr_dcm = list(path.glob('*'))  # List all DICOM files
+    arr_npy = []
+    for dicom in tqdm(arr_dcm, disable=not verbose):
+        dcm = pyd.dcmread(str(dicom))
+        npy = dcm.pixel_array
+        arr_npy.append(npy)
+
+    try:
+        arr_npy = np.stack(arr_npy)
+        arr_npy = np.moveaxis(arr_npy, [0, 1, 2], [2, 0, 1])  # Scroll through slices along last dimension
+        return arr_npy
+    except:
+        pass
 
 
 def get_patches(arr: np.ndarray, patch_size: int):
@@ -14,9 +35,10 @@ def get_patches(arr: np.ndarray, patch_size: int):
         if s % patch_size != 0:
             raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
 
-    patches = view_as_blocks(arr_in=arr, block_shape=(patch_size, patch_size, patch_size))
-    patches = patches.reshape((-1, patch_size, patch_size, patch_size))
-    return patches.astype(np.float16)
+    patches = view_as_blocks(arr_in=arr, block_shape=(patch_size, patch_size, 4))
+    original_shape = patches.shape
+    patches = patches.reshape((-1, patch_size, patch_size, 4))
+    return patches.astype(np.float16), original_shape
 
 
 def get_paths_labels(data_root: str, filter_artifact: str):
@@ -145,18 +167,6 @@ def make_generator_inference(x):
         yield _x
 
 
-def prune_patches(patches):
-    patch_map = []
-    arr_patches = []
-    for p in patches:
-        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
-            patch_map.append(0)
-        else:  # Valid patch
-            arr_patches.append(p)
-            patch_map.append(1)
-    return arr_patches, patch_map
-
-
 def normalize_patches(patches):
     arr_patches = []
     for p in patches:
@@ -171,9 +181,22 @@ def patch_compatible_zeropad(vol, patch_size):
     pad = []
     shape = vol.shape
     for s in shape:
-        if s % patch_size != 0:
+        if s < patch_size or s % patch_size != 0:
             p = patch_size - (s % patch_size)
             pad.append((math.floor(p / 2), math.ceil(p / 2)))
         else:
             pad.append((0, 0))
     return np.pad(array=vol, pad_width=pad)
+
+
+def prune_patches(original_shape, patches):
+    patch_map = []
+    arr_patches = []
+    for p in patches:
+        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
+            patch_map.append(0)
+        else:  # Valid patch
+            arr_patches.append(p)
+            patch_map.append(1)
+    patch_map = np.array(patch_map).reshape(original_shape[:3])
+    return arr_patches, patch_map
