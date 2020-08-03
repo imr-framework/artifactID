@@ -5,7 +5,7 @@ from warnings import warn
 import nibabel as nb
 import numpy as np
 import pydicom as pyd
-from skimage.util.shape import view_as_blocks
+from skimage.util import view_as_windows
 from tqdm import tqdm
 
 
@@ -28,17 +28,21 @@ def dcmfolder2npy(path: Path, verbose: bool = True):
         pass
 
 
-def get_patches(arr: np.ndarray, patch_size: int):
+def get_patches(vol: np.ndarray, patch_size: int):
     # Check shape compatibility
-    shape = arr.shape
-    for s in shape:
-        if s % patch_size != 0:
-            raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
+    shape = vol.shape
+    if shape[0] % patch_size != 0 or shape[1] % patch_size != 0:
+        raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
 
-    patches = view_as_blocks(arr_in=arr, block_shape=(patch_size, patch_size, 4))
-    original_shape = patches.shape
-    patches = patches.reshape((-1, patch_size, patch_size, 4))
-    return patches.astype(np.float16), original_shape
+    patches = []
+    for i in range(vol.shape[-1]):
+        sli = vol[..., i]
+        _patches = view_as_windows(arr_in=sli, window_shape=patch_size, step=patch_size)
+        _patches = _patches.reshape((-1, patch_size, patch_size))
+        for p in _patches:
+            if not (np.count_nonzero(p) == 0 or p.max() == p.min()):  # Valid patch
+                patches.append(p)
+    return np.array(patches, dtype=np.float16)
 
 
 def get_paths_labels(data_root: str, filter_artifact: str):
@@ -180,19 +184,21 @@ def normalize_patches(patches):
 def patch_compatible_zeropad(vol, patch_size):
     pad = []
     shape = vol.shape
-    for s in shape:
+    for s in shape[:2]:
         if s < patch_size or s % patch_size != 0:
             p = patch_size - (s % patch_size)
             pad.append((math.floor(p / 2), math.ceil(p / 2)))
         else:
             pad.append((0, 0))
+    pad.append((0, 0))  # Do not pad along last dimension
     return np.pad(array=vol, pad_width=pad)
 
 
 def prune_patches(original_shape, patches):
     patch_map = []
     arr_patches = []
-    for p in patches:
+    for i in range(patches.shape[-1]):
+
         if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
             patch_map.append(0)
         else:  # Valid patch

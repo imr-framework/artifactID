@@ -42,8 +42,7 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_rot = data_ops.patch_compatible_zeropad(vol=vol_rot, patch_size=patch_size)
-        patches, original_shape = data_ops.get_patches(arr=vol_rot, patch_size=patch_size)
-        patches, patch_map = data_ops.prune_patches(patches=patches, original_shape=original_shape)
+        patches = data_ops.get_patches(vol=vol_rot, patch_size=patch_size)
         patches = data_ops.normalize_patches(patches=patches)
 
         # Save to disk
@@ -54,5 +53,5 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
             suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
             subject = path_t1.name.replace(suffix, '')
             _path_save2 = _path_save.joinpath(subject)
-            _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+            _path_save2 = str(_path_save2) + f'_slice{counter}.npy'
             np.save(arr=p, file=_path_save2)

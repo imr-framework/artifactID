@@ -1,7 +1,7 @@
+import math
 from pathlib import Path
 
 import cv2
-import math
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
@@ -51,23 +51,26 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
 
         kspace_center = math.ceil(N * 0.04)
         center_lines = range(int(N / 2) - kspace_center, int(N / 2) + kspace_center)
-        random_lines = np.random.randint(0, N, int((N - 2 * kspace_center)/2))
+        random_lines = np.random.randint(0, N, int((N - 2 * kspace_center) / 2))
         if trans_direction == 0:
-        # TODO: remove hard coded numbers
-            kdat_nrm[random_lines[:int(len(random_lines)/2)],:, :] = kdat_rot[random_lines[:int(len(random_lines)/2)], :,:]
-            kdat_nrm[random_lines[int(len(random_lines)/2):], :, :] = kdat_trans[random_lines[int(len(random_lines)/2):],:, :]
+            # TODO: remove hard coded numbers
+            kdat_nrm[random_lines[:int(len(random_lines) / 2)], :, :] = kdat_rot[
+                                                                        random_lines[:int(len(random_lines) / 2)], :, :]
+            kdat_nrm[random_lines[int(len(random_lines) / 2):], :, :] = kdat_trans[
+                                                                        random_lines[int(len(random_lines) / 2):], :, :]
             kdat_nrm[center_lines, :, :] = kdat_orig[center_lines, :, :]
         else:
-            kdat_nrm[:, random_lines[:int(len(random_lines)/2)], :] = kdat_rot[:, random_lines[:int(len(random_lines)/2)], :]
-            kdat_nrm[:, random_lines[int(len(random_lines)/2):], :] = kdat_trans[:, random_lines[int(len(random_lines)/2):], :]
+            kdat_nrm[:, random_lines[:int(len(random_lines) / 2)], :] = kdat_rot[:,
+                                                                        random_lines[:int(len(random_lines) / 2)], :]
+            kdat_nrm[:, random_lines[int(len(random_lines) / 2):], :] = kdat_trans[:,
+                                                                        random_lines[int(len(random_lines) / 2):], :]
             kdat_nrm[:, center_lines, :] = kdat_orig[:, center_lines, :]
 
         vol_nrm = np.abs(np.fft.ifftn(np.fft.ifftshift(kdat_nrm)))
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_nrm = data_ops.patch_compatible_zeropad(vol=vol_nrm, patch_size=patch_size)
-        patches, original_shape = data_ops.get_patches(arr=vol_nrm, patch_size=patch_size)
-        patches, patch_map = data_ops.prune_patches(patches=patches, original_shape=original_shape)
+        patches = data_ops.get_patches(vol=vol_nrm, patch_size=patch_size)
         patches = data_ops.normalize_patches(patches=patches)
 
         # Save to disk
@@ -77,5 +80,5 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         for counter, p in enumerate(patches):
             subject = path_t1.name.replace('.nii.gz', '')
             _path_save2 = _path_save.joinpath(subject)
-            _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+            _path_save2 = str(_path_save2) + f'_slice{counter}.npy'
             np.save(arr=p, file=_path_save2)
