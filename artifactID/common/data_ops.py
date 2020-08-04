@@ -28,17 +28,44 @@ def dcmfolder2npy(path: Path, verbose: bool = True):
         pass
 
 
-def get_patches(arr: np.ndarray, patch_size: int):
-    # Check shape compatibility
-    shape = arr.shape
-    for s in shape:
-        if s % patch_size != 0:
-            raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
+def get_patches(vol: np.ndarray, patch_size: int):
+    if not isinstance(patch_size, list):
+        patch_size = [patch_size] * 3
 
-    patches = view_as_blocks(arr_in=arr, block_shape=(patch_size, patch_size, 4))
+    # Check shape compatibility
+    shape = vol.shape
+    for i in range(len(shape)):
+        s = shape[i]
+        p = patch_size[i]
+        if s % p != 0:
+            raise Exception(f'Incompatible shapes: {shape} and {p}')
+
+    patches = view_as_blocks(arr_in=vol, block_shape=tuple(patch_size))
     original_shape = patches.shape
-    patches = patches.reshape((-1, patch_size, patch_size, 4))
-    return patches.astype(np.float16), original_shape
+    patches = patches.reshape((-1,) + tuple(patch_size))
+
+    patch_map = []
+    pruned_patches = []
+    for p in patches:
+        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
+            patch_map.append(0)
+        else:  # Valid patch
+            pruned_patches.append(p)
+            patch_map.append(1)
+
+    patch_map = np.array(patch_map).reshape(original_shape[:3])
+    return np.array(pruned_patches).astype(np.float16), patch_map
+
+
+def get_patch_size_from_config(patch_size):
+    try:
+        patch_size = int(patch_size)
+    except:  # patch_size is not an int, must be a tuple
+        patch_size = patch_size.split(',')
+        patch_size = list(map(lambda to_int: int(to_int), patch_size))
+        if len(patch_size) > 3:
+            raise ValueError(f'patch_size should either be an int or a list of length 3, you passed {patch_size}')
+    return patch_size
 
 
 def get_paths_labels(data_root: str, filter_artifact: str):
@@ -178,12 +205,18 @@ def normalize_patches(patches):
 
 
 def patch_compatible_zeropad(vol, patch_size):
+    if not isinstance(patch_size, list):
+        patch_size = [patch_size] * 3
+
     pad = []
     shape = vol.shape
-    for s in shape:
-        if s < patch_size or s % patch_size != 0:
-            p = patch_size - (s % patch_size)
-            pad.append((math.floor(p / 2), math.ceil(p / 2)))
+    for i in range(len(shape)):
+        s = shape[i]
+        p = patch_size[i]
+
+        if s < p or s % p != 0:
+            _pad = p - (s % p)
+            pad.append((math.floor(_pad / 2), math.ceil(_pad / 2)))
         else:
             pad.append((0, 0))
     return np.pad(array=vol, pad_width=pad)
