@@ -220,16 +220,3 @@ def patch_compatible_zeropad(vol, patch_size):
         else:
             pad.append((0, 0))
     return np.pad(array=vol, pad_width=pad)
-
-
-def prune_patches(original_shape, patches):
-    patch_map = []
-    arr_patches = []
-    for p in patches:
-        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
-            patch_map.append(0)
-        else:  # Valid patch
-            arr_patches.append(p)
-            patch_map.append(1)
-    patch_map = np.array(patch_map).reshape(original_shape[:3])
-    return arr_patches, patch_map

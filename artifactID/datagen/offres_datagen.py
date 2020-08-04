@@ -4,14 +4,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 import scipy.io as sio
-
+from OCTOPUS import ORC
 from tqdm import tqdm
 
 from artifactID.common import data_ops
 from artifactID.datagen import generate_fieldmap
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches, glob_nifti
-from OCTOPUS import ORC
-
 
 
 def _gen_fieldmap(_slice, _freq_range):
@@ -95,8 +92,7 @@ def main(path_read_data: str, path_save_data: str, path_ktraj: str, path_dcf: st
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_b0 = data_ops.patch_compatible_zeropad(vol=vol_b0, patch_size=patch_size)
-        patches, original_shape = data_ops.get_patches(arr=vol_b0, patch_size=patch_size)
-        patches, patch_map = data_ops.prune_patches(patches=patches, original_shape=original_shape)
+        patches, patch_map = data_ops.get_patches(vol=vol_b0, patch_size=patch_size)
         patches = data_ops.normalize_patches(patches=patches)
 
         # Save to disk

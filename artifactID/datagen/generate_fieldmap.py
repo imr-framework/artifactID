@@ -1,10 +1,11 @@
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
 from OCTOPUS import ORC
 from OCTOPUS.Fieldmap.fieldmap_gen import fieldmap_bin
-def realistic(N, fmax , bin_opt = True, bin_val = 5):
+
+
+def realistic(N, fmax, bin_opt=True, bin_val=5):
     """
     Creates a realistic field map
 
@@ -36,14 +37,13 @@ def realistic(N, fmax , bin_opt = True, bin_val = 5):
     M = np.random.rand(2, 2)
     M2 = cv2.resize(M, (N, N))
 
-
     dst = np.zeros(M2.shape)
-
 
     if bin_opt:
         field_map = fieldmap_bin(M2, 0.01)
-    field_map = cv2.normalize(field_map, dst, -fmax, fmax, cv2.NORM_MINMAX)# * mask
+    field_map = cv2.normalize(field_map, dst, -fmax, fmax, cv2.NORM_MINMAX)  # * mask
     return field_map
+
 
 def mask_fieldmap(vol, fieldmap_sl):
     N = vol.shape[0]
@@ -51,14 +51,15 @@ def mask_fieldmap(vol, fieldmap_sl):
 
     masked_fieldmap = np.zeros(vol.shape)
     for sl in range(Nslices):
-        im = vol[:,:,sl]
+        im = vol[:, :, sl]
         hist = np.histogram(im)
         mask = cv2.threshold(im, hist[1][hist[0].argmax() + 1], 1, cv2.THRESH_BINARY)
-        masked_fieldmap[:,:,sl] = fieldmap_sl * mask[1]
-    plt.imshow(masked_fieldmap[:,:,58])
+        masked_fieldmap[:, :, sl] = fieldmap_sl * mask[1]
+    plt.imshow(masked_fieldmap[:, :, 58])
     plt.colorbar()
     plt.show()
     return masked_fieldmap
+
 
 def _bin_five(field_map: np.ndarray, freq_offset: float):
     bins = np.arange(-freq_offset, freq_offset, 5)
@@ -142,6 +143,7 @@ def find_nearest(array, value):
 
     return idx
 
+
 def parabola_formula(N: int):
     """
     Parabola values to fit an image of N rows/columns
@@ -169,7 +171,9 @@ def parabola_formula(N: int):
     yaxis = y(np.arange(-N / 2, N / 2, 1)).reshape(1, N)
 
     return yaxis
-def fieldmap_bin(field_map: np.ndarray, bin : int):
+
+
+def fieldmap_bin(field_map: np.ndarray, bin: int):
     '''
     Bins a given field map given a binning value
 
@@ -194,7 +198,9 @@ def fieldmap_bin(field_map: np.ndarray, bin : int):
             binned_field_map[x, y] = bins[idx]
 
     return binned_field_map
-def hyperbolic(N: int, fmax : float, bin_opt : bool = True,  bin_val : int = 5):
+
+
+def hyperbolic(N: int, fmax: float, bin_opt: bool = True, bin_val: int = 5):
     """
     Creates a hyperbolic field map
 
@@ -223,6 +229,7 @@ def hyperbolic(N: int, fmax : float, bin_opt : bool = True,  bin_val : int = 5):
     if bin_opt:
         field_map = fieldmap_bin(field_map, bin_val)
     return field_map
+
 
 '''
 plt.subplot(1, 3, 1)

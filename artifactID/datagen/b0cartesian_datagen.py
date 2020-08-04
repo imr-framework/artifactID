@@ -1,18 +1,18 @@
 import math
 from pathlib import Path
-from tqdm import tqdm
+
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+from OCTOPUS import ORC
+from tqdm import tqdm
 
 from artifactID.common import data_ops
+from artifactID.common.data_ops import load_nifti_vol
 from artifactID.datagen import generate_fieldmap
-from artifactID.common.data_ops import glob_brats_t1, load_nifti_vol, get_patches, glob_nifti
-from OCTOPUS import ORC
-from OCTOPUS.Fieldmap.fieldmap_gen import realistic
 
 
-def orc_forwardmodel(vol: np.ndarray, ktraj: np.ndarray,  fieldmap):
+def orc_forwardmodel(vol: np.ndarray, ktraj: np.ndarray, fieldmap):
     """
     Adds off-resonance blurring to simulate B0 inhomogeneity artifacts.
 
@@ -36,8 +36,7 @@ def orc_forwardmodel(vol: np.ndarray, ktraj: np.ndarray,  fieldmap):
 
     for ind in range(num_slices):
         slice = vol[:, :, ind]
-        fieldmap_sl = fieldmap[:,:,ind]
-
+        fieldmap_sl = fieldmap[:, :, ind]
 
         or_corrupted = ORC.add_or_CPR(slice, ktraj, fieldmap_sl)  # Corrupt the image
 
@@ -67,7 +66,6 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
     arr_max_freq *= subjects_per_class
     np.random.shuffle(arr_max_freq)
 
-
     # =========
     # DATAGEN
     # =========
@@ -81,26 +79,25 @@ def main(path_read_data: str, path_save_data: str, patch_size: int):
         dt = 10e-6  # grad raster time
         ktraj_cart = np.arange(0, N * dt, dt).reshape(1, N)
         ktraj = np.tile(ktraj_cart, (N, 1))
-        #field_map = generate_fieldmap.hyperbolic(N, freq)  # Simulate the field map
+        # field_map = generate_fieldmap.hyperbolic(N, freq)  # Simulate the field map
         field_map = generate_fieldmap.realistic(N, freq)
 
         masked_fieldmap = generate_fieldmap.mask_fieldmap(vol, field_map)
 
         vol_b0 = orc_forwardmodel(vol=vol, ktraj=ktraj, fieldmap=masked_fieldmap)
-        #vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
+        # vol_b0 = np.moveaxis(vol_b0, [0, 1, 2], [2, 0, 1])  # Iterate through slices on the last dim
         plt.subplot(131)
-        plt.imshow(vol[:,:,58], cmap='gray')
+        plt.imshow(vol[:, :, 58], cmap='gray')
         plt.subplot(132)
-        plt.imshow(vol_b0[:,:,58],cmap='gray')
+        plt.imshow(vol_b0[:, :, 58], cmap='gray')
         plt.title(str(freq))
         plt.subplot(133)
-        plt.imshow(vol[:,:,58] - vol_b0[:,:,58], cmap='gray')
+        plt.imshow(vol[:, :, 58] - vol_b0[:, :, 58], cmap='gray')
         plt.show()
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_b0 = data_ops.patch_compatible_zeropad(vol=vol_b0, patch_size=patch_size)
-        patches, original_shape = data_ops.get_patches(arr=vol_b0, patch_size=patch_size)
-        patches, patch_map = data_ops.prune_patches(patches=patches, original_shape=original_shape)
+        patches, patch_map = data_ops.get_patches(vol=vol_b0, patch_size=patch_size)
         patches = data_ops.normalize_patches(patches=patches)
 
         # Save to disk
