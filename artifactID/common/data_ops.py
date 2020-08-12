@@ -40,7 +40,7 @@ def get_patches(vol: np.ndarray, patch_size: int):
         _patches = view_as_windows(arr_in=sli, window_shape=patch_size, step=patch_size)
         _patches = _patches.reshape((-1, patch_size, patch_size))
         for p in _patches:
-            if not (np.count_nonzero(p) == 0 or p.max() == p.min()):  # Valid patch
+            if not (np.count_nonzero(p) < 0.3 * p.size or p.max() == p.min()):  # Valid patch
                 patches.append(p)
     return np.array(patches, dtype=np.float16)
 
