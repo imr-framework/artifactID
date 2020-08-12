@@ -13,8 +13,7 @@ from tensorflow.keras.layers import Conv3D, Dense, MaxPool3D, Flatten
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import Sequential, load_model
 
-from artifactID.common.data_ops import get_paths_labels
-from artifactID.common.data_ops import make_generator_train
+from artifactID.common import data_ops
 
 # =========
 # TENSORFLOW CONFIG
@@ -28,7 +27,7 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int,
+def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: list, random_seed: int,
          resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
@@ -43,7 +42,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # DATA SPLITTING
     # =========
     # Get paths and labels
-    x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
+    x_paths, y_labels = data_ops.get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
     dict_label_int = dict(zip(np.unique(y_labels), itertools.count(0)))  # Map labels to int
     y_int = np.fromiter(map(lambda label: dict_label_int[label], y_labels), dtype=np.int8)
 
@@ -62,7 +61,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # =========
     # MODEL
     # =========
-    input_shape = (patch_size, patch_size, patch_size, 1)
+    input_shape = patch_size + [1]
     if resume_training is not None:  # Continue training pre-trained model
         model = load_model(resume_training)
     else:  # New model
@@ -79,13 +78,13 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # TRAINING
     # =========
     train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
-    train_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
+    train_dataset = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
                                                    args=[train_x_paths, train_y_int],
                                                    output_types=(tf.float16, tf.int8),
                                                    output_shapes=(tf.TensorShape(input_shape),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
     val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
-    val_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
+    val_dataset = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
                                                  args=[val_x_paths, val_y_int],
                                                  output_types=(tf.float16, tf.int8),
                                                  output_shapes=(tf.TensorShape(input_shape),
@@ -169,7 +168,8 @@ if __name__ == '__main__':
     epochs = int(config_training['epochs'])  # Number of epochs
     filter_artifact = config_training['filter_artifact']  # Train on all data/specific artifact
     filter_artifact = filter_artifact.lower()
-    patch_size = int(config_training['patch_size'])  # Patch size
+    patch_size = config_training['patch_size']  # Patch size
+    patch_size = data_ops.get_patch_size_from_config(patch_size=patch_size)
     path_data_root = config_training['path_read_data']  # Path to training data
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')

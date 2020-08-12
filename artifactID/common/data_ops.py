@@ -29,9 +29,6 @@ def dcmfolder2npy(path: Path, verbose: bool = True):
 
 
 def get_patches(vol: np.ndarray, patch_size: int):
-    if not isinstance(patch_size, list):
-        patch_size = [patch_size] * 3
-
     # Check shape compatibility
     shape = vol.shape
     for i in range(len(shape)):
@@ -59,7 +56,7 @@ def get_patches(vol: np.ndarray, patch_size: int):
 
 def get_patch_size_from_config(patch_size):
     try:
-        patch_size = int(patch_size)
+        patch_size = [int(patch_size)] * 3
     except:  # patch_size is not an int, must be a tuple
         patch_size = patch_size.split(',')
         patch_size = list(map(lambda to_int: int(to_int), patch_size))
