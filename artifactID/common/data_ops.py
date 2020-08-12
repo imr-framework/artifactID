@@ -144,7 +144,7 @@ def make_generator_train(x, y):
 
         for counter in range(len(x)):
             _x = np.load(x[counter])  # Load volume
-            _x = np.expand_dims(_x, axis=3)  # Convert shape to (..., 1)
+            _x = np.expand_dims(_x, axis=2)  # Convert shape to (..., 1)
             _x = _x.astype(np.float16)  # Mixed precision
 
             _y = np.array([y[counter]]).astype(np.int8)
