@@ -25,7 +25,7 @@ def __get_dict_from_log(log: list):
 
 
 def __make_heatmap(patch_map: np.ndarray, patch_size: list, vol: np.ndarray, y_pred: np.ndarray):
-    vol = vol.astype(np.float)
+    vol = vol.astype(np.float16)
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize volume
 
     all_maps = []
@@ -40,18 +40,17 @@ def __make_heatmap(patch_map: np.ndarray, patch_size: list, vol: np.ndarray, y_p
     # 2x4 film of volumes
     _row1 = np.concatenate((vol, vol, vol, vol), axis=1)
     _row2 = np.concatenate((vol, vol, vol, vol), axis=1)
-    film_vol = np.concatenate((_row1, _row2), axis=0)
+    film_vol = np.concatenate((_row1, _row2), axis=0).astype(np.float16)
 
     # 2x4 film of mask overlays; first overlay is zeros to show the original volume as is
     _row1 = np.concatenate((np.zeros_like(vol), all_maps[0], all_maps[1], all_maps[2]), axis=1)
     _row2 = np.concatenate((all_maps[3], all_maps[4], all_maps[5], all_maps[6]), axis=1)
-    film_mask = np.concatenate((_row1, _row2), axis=0)
-    film_mask = film_mask.astype(np.float)
+    film_mask = np.concatenate((_row1, _row2), axis=0).astype(np.float16)
 
     # Construct alpha
     num_classes = len(y_pred[0])
     threshold = 1 / num_classes
-    film_alpha = np.zeros_like(film_vol)
+    film_alpha = np.zeros_like(film_vol, dtype=np.float16)
     film_alpha[film_mask >= threshold] = 0.5
 
     return film_vol, film_mask, film_alpha
@@ -66,7 +65,6 @@ def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_mo
     # =========
     # SET UP TESTING
     # =========
-    path_pretrained_model = Path(path_pretrained_model)
     path_model_load = path_pretrained_model / 'model.hdf5'  # Keras model
     path_model_log = path_pretrained_model / 'log.txt'  # Log file
     print('Loading model...')
@@ -137,7 +135,6 @@ def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_mo
         write += str(path_model_load) + ' \n'
         write += str(path_read_data) + '\n'
         for key, value in dict_path_pred.items():
-            key = Path(key).relative_to(path_read_data.parent)
             write += f'{key}: {value}\n'
         write += '=========\n\n'
         f.write(write)
@@ -161,15 +158,16 @@ if __name__ == '__main__':
     path_pretrained_model = config_eval['path_pretrained_model']
     save = bool(config_eval['save'])
 
-    if not Path(path_read_data).exists():
-        raise Exception(f'{path_read_data} does not exist')
-    if not Path(path_pretrained_model).exists():
-        raise Exception(f'{path_pretrained_model} does not exist')
-
     # =========
     # DATA CHECK
     # =========
     path_read_data = Path(path_read_data)
+    if not path_read_data.exists():
+        raise Exception(f'{path_read_data} does not exist')
+    path_pretrained_model = Path(path_pretrained_model)
+    if not path_pretrained_model.exists():
+        raise Exception(f'{path_pretrained_model} does not exist')
+
     arr_files = data_ops.glob_nifti(path=path_read_data)
     format = 'nifti'
     if len(arr_files) == 0:
@@ -179,5 +177,5 @@ if __name__ == '__main__':
         raise ValueError(f'No NIFTI or DICOM files found at f{path_read_data}')
 
     # Perform inference
-    main(arr_files=arr_files, batch_size=batch_size, format=format, path_read_data=path_read_data,
-         path_pretrained_model=path_pretrained_model, patch_size=patch_size, save=save, viz=True)
+    main(arr_files=arr_files[:3], batch_size=batch_size, format=format, path_read_data=path_read_data,
+         path_pretrained_model=path_pretrained_model, patch_size=patch_size, save=save, viz=False)
