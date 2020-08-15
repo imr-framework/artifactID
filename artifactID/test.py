@@ -1,5 +1,7 @@
+import configparser
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 import numpy as np
 import tensorflow as tf
@@ -22,48 +24,57 @@ def __get_dict_from_log(log: list):
             return line
 
 
-def __viz_heatmap(heatmap: np.ndarray, patch_size: int, vol: np.ndarray, y_pred: np.ndarray):
-    if not isinstance(patch_size, list):
-        patch_size = [patch_size] * 3
+def __make_heatmap(patch_map: np.ndarray, patch_size: list, vol: np.ndarray, y_pred: np.ndarray):
+    vol = vol.astype(np.float)
+    vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize volume
 
-    # Place predictions onto heatmap
-    np.place(arr=heatmap, mask=heatmap, vals=y_pred)
+    all_maps = []
+    for artifact in y_pred.T:  # Iterate through each prediction class across all patches
+        artifact_map = np.empty(shape=patch_map.shape, dtype=np.float16)
+        np.place(arr=artifact_map, mask=patch_map, vals=artifact)  # Place predictions onto heatmap
 
-    # Upscale heatmap
-    for counter, p in enumerate(patch_size):
-        heatmap = np.repeat(heatmap, p, axis=counter)
+        for counter, p in enumerate(patch_size):  # Upscale to original resolution
+            artifact_map = np.repeat(artifact_map, p, axis=counter)
+        all_maps.append(artifact_map)
 
-    sass.scroll_mask(volume=vol, mask=heatmap, mask_vmin=0, mask_vmax=6)  # Plot
+    # 2x4 film of volumes
+    _row1 = np.concatenate((vol, vol, vol, vol), axis=1)
+    _row2 = np.concatenate((vol, vol, vol, vol), axis=1)
+    film_vol = np.concatenate((_row1, _row2), axis=0)
+
+    # 2x4 film of mask overlays; first overlay is zeros to show the original volume as is
+    _row1 = np.concatenate((np.zeros_like(vol), all_maps[0], all_maps[1], all_maps[2]), axis=1)
+    _row2 = np.concatenate((all_maps[3], all_maps[4], all_maps[5], all_maps[6]), axis=1)
+    film_mask = np.concatenate((_row1, _row2), axis=0)
+    film_mask = film_mask.astype(np.float)
+
+    # Construct alpha
+    num_classes = len(y_pred[0])
+    threshold = 1 / num_classes
+    film_alpha = np.zeros_like(film_vol)
+    film_alpha[film_mask >= threshold] = 0.5
+
+    return film_vol, film_mask, film_alpha
 
 
-def main(arr_vols, arr_files_folders, path_read_data: str, path_model_root: str, patch_size, viz: bool = True):
-    # =========
-    # DATA PRE-PROCESSING
-    # =========
-    print('Pre-processing data...')
-    # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
-    arr_patches = []
-    arr_patch_maps = []
-    for i, vol in enumerate(arr_vols):
-        vol = data_ops.patch_compatible_zeropad(vol=vol, patch_size=patch_size)
-        arr_vols[i] = vol  # Replace old vol with padded vol
-        patches, patch_map = data_ops.get_patches(vol=vol, patch_size=patch_size)
-        patches = data_ops.normalize_patches(patches=patches)
-        arr_patches.append(patches)
-        arr_patch_maps.append(patch_map)
+def __show_heatmap(film_vol: np.ndarray, film_mask: np.ndarray, film_alpha: np.ndarray):
+    sass.scroll_mask(film_vol, mask=film_mask, alpha=film_alpha)
 
+
+def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_model: Path, path_read_data: Path,
+         patch_size: list, save: bool, viz: bool = True):
     # =========
     # SET UP TESTING
     # =========
-    path_model_root = Path(path_model_root)
-    path_model_load = path_model_root / 'model.hdf5'  # Keras model
-    path_model_log = path_model_root / 'log.txt'  # Log file
+    path_pretrained_model = Path(path_pretrained_model)
+    path_model_load = path_pretrained_model / 'model.hdf5'  # Keras model
+    path_model_log = path_pretrained_model / 'log.txt'  # Log file
     print('Loading model...')
-    model = load_model(path_model_load)  # Load model
+    model = load_model(str(path_model_load))  # Load model
     log = open(str(path_model_log), 'r').readlines()  # Read log file
 
     # Make generator for feeding data to the model
-    def make_generator(patches):
+    def __generator_patches(patches: list):
         for p in patches:
             p = p.astype(np.float16)
             p = np.expand_dims(a=p, axis=3)
@@ -74,44 +85,53 @@ def main(arr_vols, arr_files_folders, path_read_data: str, path_model_root: str,
     dict_label_int = eval(dict_label_int)  # Convert str representation of dict into dict object
     dict_int_label = dict(zip(dict_label_int.values(), dict_label_int.keys()))
 
-    output_shape = tf.TensorShape(patch_size + [1])
-
     # =========
     # TESTING
     # =========
     print(f'Performing inference...')
     dict_path_pred = dict()
-    for i in range(len(arr_vols)):  # Inference on each volume
-        folder = arr_files_folders[i]  # To make a dictionary of files/folders-predictions
-        patches = arr_patches[i]
-        patch_map = arr_patch_maps[i]
-        vol = arr_vols[i]
+    output_shape = tf.TensorShape(patch_size + [1])
+    for counter, vol in enumerate(data_ops.generator_inference(x=arr_files, file_format=format)):
+        print(arr_files[counter])
+        vol = data_ops.patch_compatible_zeropad(vol=vol, patch_size=patch_size)
+        patches, patch_map = data_ops.get_patches(vol=vol, patch_size=patch_size)
+        patches = data_ops.normalize_patches(patches=patches)
+        folder = arr_files[counter].parent.parts[-1]  # To make a dictionary of files/folders-predictions
 
         # Make dataset from generator
-        dataset = tf.data.Dataset.from_generator(generator=make_generator,
+        dataset = tf.data.Dataset.from_generator(generator=__generator_patches,
                                                  args=[patches],
-                                                 output_types=(tf.float16),
-                                                 output_shapes=(output_shape)).batch(batch_size=32)
+                                                 output_types=tf.float16,
+                                                 output_shapes=output_shape).batch(batch_size=batch_size)
 
         # Inference
         y_pred = model.predict(x=dataset)
-        y_pred = np.argmax(y_pred, axis=1).astype(np.int32)
 
-        # Convert integer outputs to labels
-        y_pred_unique = np.unique(y_pred)
+        # Convert integer outputs to labels and map results
+        y_pred_unique = np.unique(np.argmax(y_pred, axis=1))
         y_pred_label = [dict_int_label[pred] for pred in y_pred_unique]
-
         dict_path_pred[folder] = y_pred_label
 
-        # Construct and visualize heatmap
-        if viz:
-            __viz_heatmap(heatmap=patch_map, patch_size=patch_size, vol=vol, y_pred=y_pred)
+        # =========
+        # SAVE TO DISK AND/OR VIZ. PREDICTIONS
+        # =========
+        if save or viz:
+            results = __make_heatmap(patch_map=patch_map, patch_size=patch_size, vol=vol, y_pred=y_pred)
+            film_vol, film_mask, film_alpha = results
+
+            if save:
+                path_save = arr_files[counter].parent
+                np.save(arr=film_vol, file=str(path_save / 'vol.npy'))
+                np.save(arr=film_mask, file=str(path_save / 'mask.npy'))
+                np.save(arr=film_alpha, file=str(path_save / 'alpha.npy'))
+            if viz:
+                __show_heatmap(film_vol=film_vol, film_mask=film_mask, film_alpha=film_alpha)
 
     # =========
-    # SAVE PREDICTIONS TO DISK
+    # SAVE STATS TO DISK
     # =========
-    print('Saving predictions to disk...')
-    with open(str(path_model_root / 'test_log.txt'), 'a') as f:
+    print('Updating test log...')
+    with open(str(path_pretrained_model / 'test_log.txt'), 'a') as f:
         time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving to log
         write = time_string + '\n'
         write += str(path_model_load) + ' \n'
@@ -122,3 +142,42 @@ def main(arr_vols, arr_files_folders, path_read_data: str, path_model_root: str,
         write += '=========\n\n'
         f.write(write)
     print('Done')
+
+
+if __name__ == '__main__':
+    # =========
+    # READ CONFIG
+    # =========
+    # Read settings.ini configuration file
+    path_settings = 'settings.ini'
+    config = configparser.ConfigParser()
+    config.read(path_settings)
+
+    config_eval = config['TEST']
+    batch_size = int(config_eval['batch_size'])
+    patch_size = config_eval['patch_size']
+    patch_size = data_ops.get_patch_size_from_config(patch_size=patch_size)
+    path_read_data = config_eval['path_read_data']
+    path_pretrained_model = config_eval['path_pretrained_model']
+    save = bool(config_eval['save'])
+
+    if not Path(path_read_data).exists():
+        raise Exception(f'{path_read_data} does not exist')
+    if not Path(path_pretrained_model).exists():
+        raise Exception(f'{path_pretrained_model} does not exist')
+
+    # =========
+    # DATA CHECK
+    # =========
+    path_read_data = Path(path_read_data)
+    arr_files = data_ops.glob_nifti(path=path_read_data)
+    format = 'nifti'
+    if len(arr_files) == 0:
+        arr_files = data_ops.glob_dicom(path=path_read_data)
+        format = 'dicom'
+    if len(arr_files) == 0:
+        raise ValueError(f'No NIFTI or DICOM files found at f{path_read_data}')
+
+    # Perform inference
+    main(arr_files=arr_files, batch_size=batch_size, format=format, path_read_data=path_read_data,
+         path_pretrained_model=path_pretrained_model, patch_size=patch_size, save=save, viz=True)

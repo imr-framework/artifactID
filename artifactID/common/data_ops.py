@@ -9,12 +9,12 @@ from skimage.util.shape import view_as_blocks
 from tqdm import tqdm
 
 
-def dcmfolder2npy(path: Path, verbose: bool = True):
+def __dcmfolder2npy(path: Path):
     if not isinstance(path, Path):
         path = Path(path)
 
     arr_dcm = list(path.glob('*'))  # List all DICOM files
-    arr_npy = []
+    arr_npy = [pyd.dcmread(str(dicom)).pixel_array for dicom in arr_dcm]
     for dicom in tqdm(arr_dcm, disable=not verbose):
         dcm = pyd.dcmread(str(dicom))
         npy = dcm.pixel_array
@@ -25,7 +25,7 @@ def dcmfolder2npy(path: Path, verbose: bool = True):
         arr_npy = np.moveaxis(arr_npy, [0, 1, 2], [2, 0, 1])  # Scroll through slices along last dimension
         return arr_npy
     except:
-        pass
+        raise Exception('Unhandled exception')
 
 
 def get_patches(vol: np.ndarray, patch_size: int):
@@ -95,6 +95,19 @@ def get_paths(data_root: str):
     return np.array(files)
 
 
+def glob_brats_t1(path_brats: str):
+    path_brats = Path(path_brats)
+    arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
+    arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
+    return arr_path_brats_t1
+
+
+def glob_dicom(path: str):
+    path = Path(path)
+    arr_path = list(path.glob('**/*.dcm'))
+    return arr_path
+
+
 def glob_nifti(path: str):
     path = Path(path)
     arr_path = list(path.glob('**/*.nii.gz'))
@@ -136,7 +149,7 @@ def load_nifti_vol(path: str):
     return vol
 
 
-def make_generator_train(x, y):
+def generator_train(x, y):
     """
     Training generator indefinitely yielding volumes loaded from .npy files specified in `x`. Also yields paired labels
     from `y`. Every `while` loop iteration counts as one epoch. The data are shuffled at the start of every epoch.
@@ -171,23 +184,31 @@ def make_generator_train(x, y):
             yield _x, _y
 
 
-def make_generator_inference(x):
+def generator_inference(x, file_format: str = 'npy'):
     """
     Inference generator yielding volumes loaded from .npy files specified in `x`.
 
     Parameters
     ==========
     x : array-like
-        Array of paths to .npy files to load.
+        Paths of volumes to load.
+    file_format : str
+        File-format of volumes to load. Valid values are 'npy', 'nifti' or 'dicom'.
 
     Yields
     ======
     _x : np.ndarray
         Array containing a single volume of shape (..., 1) and datatype np.float16.
     """
-    for counter in range(len(x)):
-        _x = np.load(x[counter])  # Load volume
-        _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
+    for path_load in x:
+        if file_format == 'npy':
+            _x = np.load(path_load)  # Load volume
+        elif file_format == 'nifti':
+            _x = nb.load(path_load).get_fdata()
+        elif file_format == 'dicom':
+            _x = __dcmfolder2npy(path=path_load)
+        else:
+            raise Exception('Unhandled exception')
         yield _x
 
 
