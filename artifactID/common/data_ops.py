@@ -86,24 +86,20 @@ def get_paths(data_root: str):
     return np.array(files)
 
 
-def glob_brats_t1(path_brats: str):
-    path_brats = Path(path_brats)
-    arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
-    arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
-    return arr_path_brats_t1
-
-
-def glob_dicom(path: str):
-    path = Path(path)
+def glob_dicom(path: Path):
     arr_path = list(path.glob('**/*.dcm'))
     return arr_path
 
 
-def glob_nifti(path: str):
-    path = Path(path)
-    arr_path = list(path.glob('**/*.nii.gz'))
-    arr_path2 = list(path.glob('**/*.nii'))
-    return arr_path + arr_path2
+def glob_nifti(path: Path):
+    if 'miccai' in str(path).lower():
+        arr_path = list(path.glob('**/*.nii.gz'))
+        arr_path = list(filter(lambda x: 't1.nii' in str(x), arr_path))
+        return arr_path
+    else:
+        arr_path = list(path.glob('**/*.nii.gz'))
+        arr_path2 = list(path.glob('**/*.nii'))
+        return arr_path + arr_path2
 
 
 def load_nifti_vol(path: str):
