@@ -6,7 +6,6 @@ import nibabel as nb
 import numpy as np
 import pydicom as pyd
 from skimage.util.shape import view_as_blocks
-from tqdm import tqdm
 
 
 def __dcmfolder2npy(path: Path):
@@ -15,10 +14,6 @@ def __dcmfolder2npy(path: Path):
 
     arr_dcm = list(path.glob('*'))  # List all DICOM files
     arr_npy = [pyd.dcmread(str(dicom)).pixel_array for dicom in arr_dcm]
-    for dicom in tqdm(arr_dcm, disable=not verbose):
-        dcm = pyd.dcmread(str(dicom))
-        npy = dcm.pixel_array
-        arr_npy.append(npy)
 
     try:
         arr_npy = np.stack(arr_npy)
@@ -28,7 +23,7 @@ def __dcmfolder2npy(path: Path):
         raise Exception('Unhandled exception')
 
 
-def get_patches(vol: np.ndarray, patch_size: int):
+def get_patches(vol: np.ndarray, patch_size: list):
     # Check shape compatibility
     shape = vol.shape
     for i in range(len(shape)):
@@ -38,20 +33,16 @@ def get_patches(vol: np.ndarray, patch_size: int):
             raise Exception(f'Incompatible shapes: {shape} and {p}')
 
     patches = view_as_blocks(arr_in=vol, block_shape=tuple(patch_size))
-    original_shape = patches.shape
-    patches = patches.reshape((-1,) + tuple(patch_size))
-
-    patch_map = []
+    patch_map = np.zeros(shape=patches.shape[:3], dtype=np.int8)
     pruned_patches = []
-    for p in patches:
-        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
-            patch_map.append(0)
-        else:  # Valid patch
+    np_index = np.ndindex(patches.shape[:3])
+    for multi_index in np_index:
+        p = patches[multi_index]
+        if np.count_nonzero(p) >= 0.75 * p.size and p.max() != p.min():
             pruned_patches.append(p)
-            patch_map.append(1)
+            patch_map[multi_index] = 1
 
-    patch_map = np.array(patch_map).reshape(original_shape[:3])
-    return np.array(pruned_patches).astype(np.float16), patch_map
+    return np.array(pruned_patches, dtype=np.float16), patch_map
 
 
 def get_patch_size_from_config(patch_size):
@@ -113,13 +104,6 @@ def glob_nifti(path: str):
     arr_path = list(path.glob('**/*.nii.gz'))
     arr_path2 = list(path.glob('**/*.nii'))
     return arr_path + arr_path2
-
-
-def glob_brats_t1(path_brats: str):
-    path_brats = Path(path_brats)
-    arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
-    arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
-    return arr_path_brats_t1
 
 
 def load_nifti_vol(path: str):
@@ -213,13 +197,12 @@ def generator_inference(x, file_format: str = 'npy'):
 
 
 def normalize_patches(patches):
-    arr_patches = []
-    for p in patches:
-        _max = p.max()
-        _min = p.min()
-        p = (p - _min) / (_max - _min)
-        arr_patches.append(p)
-    return arr_patches
+    _max = np.max(patches, axis=(1, 2, 3))
+    _min = np.min(patches, axis=(1, 2, 3))
+    m3 = _min.reshape((-1, 1, 1, 1))
+    _range = (_max - _min).reshape((-1, 1, 1, 1))
+    patches = (patches - m3) / _range
+    return patches
 
 
 def patch_compatible_zeropad(vol, patch_size):
