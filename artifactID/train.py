@@ -78,13 +78,13 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # TRAINING
     # =========
     train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
-    train_dataset = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
+    train_dataset = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                    args=[train_x_paths, train_y_int],
                                                    output_types=(tf.float16, tf.int8),
                                                    output_shapes=(tf.TensorShape(input_shape),
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
     val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
-    val_dataset = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
+    val_dataset = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                  args=[val_x_paths, val_y_int],
                                                  output_types=(tf.float16, tf.int8),
                                                  output_shapes=(tf.TensorShape(input_shape),
