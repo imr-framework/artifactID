@@ -49,17 +49,13 @@ def orc_forwardmodel(vol: np.ndarray, ktraj: np.ndarray, fieldmap):
     return arr_offres_vol
 
 
-def main(path_read_data: str, path_save_data: str, patch_size: int):
+def main(path_read_data: Path, path_save_data: Path, patch_size: list):
     # =========
     # LOAD PREREQUISITES
     # =========
 
     # BraTS 2018 paths
-    if 'miccai' in path_read_data.lower():
-        arr_path_read = data_ops.glob_brats_t1(path_brats=path_read_data)
-    else:
-        arr_path_read = data_ops.glob_nifti(path=path_read_data)
-    path_save_data = Path(path_save_data)
+    arr_path_read = data_ops.glob_nifti(path=path_read_data)
 
     arr_max_freq = [1600, 3200, 4800]  # Hz
     subjects_per_class = math.ceil(len(arr_path_read) / len(arr_max_freq))  # Calculate number of subjects per class

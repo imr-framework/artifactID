@@ -7,23 +7,16 @@ from tqdm import tqdm
 from artifactID.common import data_ops
 
 
-def main(path_read_data: str, path_save_data: str, patch_size: int):
-    arr_wrap_range = [55, 60, 65, 70, 75, 80]
+def main(path_read_data: Path, path_save_data: Path, patch_size: list):
     arr_wrap_range = [15, 20, 25, 30, 35]
 
     # =========
     # PATHS
     # =========
-    if 'miccai' in path_read_data.lower():
-        arr_path_read = data_ops.glob_brats_t1(path_brats=path_read_data)
-    else:
-        arr_path_read = data_ops.glob_nifti(path=path_read_data)
-    path_save_data = Path(path_save_data)
+    arr_path_read = data_ops.glob_nifti(path=path_read_data)
     subjects_per_class = math.ceil(
         len(arr_path_read) / len(arr_wrap_range))  # Calculate number of subjects per class
-    # arr_wrap_range = arr_wrap_range * subjects_per_class
     arr_wrap_range = np.tile(arr_wrap_range, subjects_per_class)
-    # np.random.shuffle(arr_wrap_range)
 
     # =========
     # DATAGEN

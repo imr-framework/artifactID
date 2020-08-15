@@ -9,15 +9,11 @@ from tqdm import tqdm
 from artifactID.common import data_ops
 
 
-def main(path_read_data: str, path_save_data: str, patch_size: int):
+def main(path_read_data: Path, path_save_data: Path, patch_size: list):
     # =========
     # PATHS
     # =========
-    if 'miccai' in path_read_data.lower():
-        arr_path_read = data_ops.glob_brats_t1(path_brats=path_read_data)
-    else:
-        arr_path_read = data_ops.glob_nifti(path=path_read_data)
-    path_save_data = Path(path_save_data)
+    arr_path_read = data_ops.glob_nifti(path=path_read_data)
 
     # =========
     # DATAGEN

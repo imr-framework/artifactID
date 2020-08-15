@@ -2,6 +2,8 @@ import configparser
 import sys
 from pathlib import Path
 
+from artifactID.common import data_ops
+
 path_search = str(Path(__file__).parent.parent)  # To allow ORC to be discoverable
 sys.path.insert(0, path_search)
 from artifactID.datagen import fov_wrap_datagen, offres_datagen, noartifact_datagen, rigidmotion_datagen, snr_datagen, \
@@ -12,11 +14,15 @@ path_settings = '../settings.ini'
 config = configparser.ConfigParser()
 config.read(path_settings)
 config_data = config['DATAGEN']
-patch_size = int(config_data['patch_size'])
+patch_size = config_data['patch_size']
+patch_size = data_ops.get_patch_size_from_config(patch_size=patch_size)
 path_read_data = config_data['path_read_data']
 path_save_data = config_data['path_save_data']
 path_ktraj = config_data['path_ktraj']
 path_dcf = config_data['path_dcf']
+
+path_read_data = Path(path_read_data)
+path_save_data = Path(path_save_data)
 
 # No-artifact datagen
 print('No-artifact datagen...')
