@@ -9,9 +9,10 @@ from time import time
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Conv2D, Dense, MaxPool2D, Flatten
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Concatenate, Conv2D, Dense, Flatten, Input, MaxPool2D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
-from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.models import load_model
 
 from artifactID.common.data_ops import get_paths_labels
 from artifactID.common.data_ops import make_generator_train
@@ -66,13 +67,23 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     if resume_training is not None:  # Continue training pre-trained model
         model = load_model(resume_training)
     else:  # New model
-        model = Sequential()
-        model.add(Conv2D(filters=32, kernel_size=3, input_shape=input_output_shape, activation='relu'))
-        model.add(MaxPool2D())
-        model.add(Conv2D(filters=16, kernel_size=3, activation='relu'))
-        model.add(MaxPool2D())
-        model.add(Flatten())
-        model.add(Dense(units=len(np.unique(train_y_int)), activation='softmax'))
+        input_1 = Input(shape=input_output_shape)
+        conv2d_11 = Conv2D(filters=32, kernel_size=9, activation='relu')(input_1)
+        maxpool_1 = MaxPool2D()(conv2d_11)
+        conv2d_12 = Conv2D(filters=16, kernel_size=9, activation='relu')(maxpool_1)
+        flatten_1 = Flatten()(conv2d_12)
+
+        input_2 = Input(shape=input_output_shape)
+        conv2d_21 = Conv2D(filters=32, kernel_size=5, activation='relu')(input_2)
+        maxpool_2 = MaxPool2D()(conv2d_21)
+        conv2d_22 = Conv2D(filters=16, kernel_size=5, activation='relu')(maxpool_2)
+        flatten_2 = Flatten()(conv2d_22)
+
+        concat = Concatenate()([flatten_1, flatten_2])
+        dense = Dense(units=32, activation='relu')(concat)
+        output = Dense(units=len(np.unique(train_y_int)), activation='softmax')(dense)
+
+        model = Model(inputs=[input_1, input_2], outputs=output)
         model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     # =========
@@ -81,14 +92,18 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
     train_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
                                                    args=[train_x_paths, train_y_int],
-                                                   output_types=(tf.float16, tf.int8),
-                                                   output_shapes=(tf.TensorShape(input_output_shape),
+                                                   output_types=({'input_1': tf.float16, 'input_2': tf.float16},
+                                                                 tf.int8),
+                                                   output_shapes=({'input_1': tf.TensorShape(input_output_shape),
+                                                                   'input_2': tf.TensorShape(input_output_shape)},
                                                                   tf.TensorShape([1]))).batch(batch_size=batch_size)
     val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
     val_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
-                                                 args=[val_x_paths, val_y_int],
-                                                 output_types=(tf.float16, tf.int8),
-                                                 output_shapes=(tf.TensorShape(input_output_shape),
+                                                 args=[train_x_paths, train_y_int],
+                                                 output_types=({'input_1': tf.float16, 'input_2': tf.float16},
+                                                               tf.int8),
+                                                 output_shapes=({'input_1': tf.TensorShape(input_output_shape),
+                                                                 'input_2': tf.TensorShape(input_output_shape)},
                                                                 tf.TensorShape([1]))).batch(batch_size=batch_size)
 
     # Model checkpoint callback - checkpoint after every epoch
