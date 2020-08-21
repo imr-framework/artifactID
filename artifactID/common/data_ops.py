@@ -28,7 +28,7 @@ def dcmfolder2npy(path: Path, verbose: bool = True):
         pass
 
 
-def get_patches(vol: np.ndarray, patch_size: int):
+def get_patches_per_slice(vol: np.ndarray, patch_size: int):
     # Check shape compatibility
     shape = vol.shape
     if shape[0] % patch_size != 0 or shape[1] % patch_size != 0:
@@ -36,11 +36,11 @@ def get_patches(vol: np.ndarray, patch_size: int):
 
     patches = []
     for i in range(vol.shape[-1]):
-        sli = vol[..., i]
-        _patches = view_as_windows(arr_in=sli, window_shape=patch_size, step=patch_size)
+        _sli = vol[..., i]
+        _patches = view_as_windows(arr_in=_sli, window_shape=patch_size, step=patch_size)
         _patches = _patches.reshape((-1, patch_size, patch_size))
         for p in _patches:
-            if not (np.count_nonzero(p) < 0.3 * p.size or p.max() == p.min()):  # Valid patch
+            if np.count_nonzero(p) >= 0.75 * p.size and p.max() != p.min():  # Valid patch
                 patches.append(p)
     return np.array(patches, dtype=np.float16)
 
@@ -91,10 +91,8 @@ def glob_brats_t1(path_brats: str):
 
 def load_nifti_vol(path: str):
     """
-    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal.
-
-    1. Ensure correct orientation of the brain
-    2. Normalize between 0-1
+    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal. Ensure correct
+    orientation of the brain.
 
     Parameters
     ==========
@@ -104,14 +102,10 @@ def load_nifti_vol(path: str):
     Returns
     =======
     numpy.ndarray
-        3D array of NIFTI file at `path`.
+        Numpy data of NIFTI file at `path`.
     """
     vol = nb.load(path).get_fdata()
-    vol = np.rot90(vol, -1, axes=(0, 1))  # Ensure correct orientation
-    filter_5pc = lambda x: np.count_nonzero(x) > 0.05 * x.size
-    slice_content_idx = [filter_5pc(vol[:, :, i]) for i in
-                         range(vol.shape[2])]  # Get indices of slices with >=5% signal
-    vol = vol[:, :, slice_content_idx]
+    vol = np.rot90(vol, -1, axes=(0, 1))  # BraTS: Ensure brain is oriented facing up
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
 
@@ -148,7 +142,7 @@ def make_generator_train(x, y):
             _x = _x.astype(np.float16)  # Mixed precision
 
             _y = np.array([y[counter]]).astype(np.int8)
-            yield _x, _y
+            yield {'input_1': _x, 'input_2': _x}, _y
 
 
 def make_generator_inference(x):
@@ -172,19 +166,18 @@ def make_generator_inference(x):
 
 
 def normalize_patches(patches):
-    arr_patches = []
-    for p in patches:
-        _max = p.max()
-        _min = p.min()
-        p = (p - _min) / (_max - _min)
-        arr_patches.append(p)
-    return arr_patches
+    _max = np.max(patches, axis=(1, 2))
+    _min = np.min(patches, axis=(1, 2))
+    m3 = _min.reshape((-1, 1, 1))
+    _range = (_max - _min).reshape((-1, 1, 1))
+    patches = (patches - m3) / _range
+    return patches
 
 
 def patch_compatible_zeropad(vol, patch_size):
     pad = []
     shape = vol.shape
-    for s in shape[:2]:
+    for s in shape[:2]:  # Pad per slice, not across volume
         if s < patch_size or s % patch_size != 0:
             p = patch_size - (s % patch_size)
             pad.append((math.floor(p / 2), math.ceil(p / 2)))
@@ -192,17 +185,3 @@ def patch_compatible_zeropad(vol, patch_size):
             pad.append((0, 0))
     pad.append((0, 0))  # Do not pad along last dimension
     return np.pad(array=vol, pad_width=pad)
-
-
-def prune_patches(original_shape, patches):
-    patch_map = []
-    arr_patches = []
-    for i in range(patches.shape[-1]):
-
-        if np.count_nonzero(p) == 0 or p.max() == p.min():  # Invalid patch, discard
-            patch_map.append(0)
-        else:  # Valid patch
-            arr_patches.append(p)
-            patch_map.append(1)
-    patch_map = np.array(patch_map).reshape(original_shape[:3])
-    return arr_patches, patch_map
