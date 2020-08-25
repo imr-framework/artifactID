@@ -2,6 +2,8 @@ import configparser
 import sys
 from pathlib import Path
 
+from sklearn.model_selection import train_test_split
+
 path_search = str(Path(__file__).parent.parent)  # To allow ORC to be discoverable
 sys.path.insert(0, path_search)
 from artifactID.datagen import fov_wrap_datagen, offres_datagen, noartifact_datagen, rigidmotion_datagen, snr_datagen, \
@@ -50,3 +52,20 @@ nonrigidmotion_datagen.main(path_read_data=path_read_data, path_save_data=path_s
 # B0 inhomogeneity Cartesian
 print('\nB0 inhomogeneity Cartesian datagen...')
 b0cartesian_datagen.main(path_read_data=path_read_data, path_save_data=path_save_data, patch_size=patch_size)
+
+# Create splits
+path_all = list(Path(path_save_data).glob('**/*.npy'))
+path_train, path_test = train_test_split(path_all, test_size=test_split, shuffle=True)
+path_train, path_val = train_test_split(path_train, test_size=validation_split, shuffle=True)
+
+# Write to disk
+for _filename, _path in (('train.txt', path_train),
+                         ('test.txt', path_test),
+                         ('val.txt', path_val)):
+    _path_save = Path(path_save_data) / _filename
+    with open(str(_path_save), 'w') as f:
+        f.write(len(_path))
+        f.write('\n')
+        for x in _path:
+            f.write(str(x))
+            f.write('\n')

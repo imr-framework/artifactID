@@ -1,6 +1,5 @@
 import math
 from pathlib import Path
-from warnings import warn
 
 import nibabel as nb
 import numpy as np
@@ -34,6 +33,7 @@ def get_patches_per_slice(vol: np.ndarray, patch_size: int):
     if shape[0] % patch_size != 0 or shape[1] % patch_size != 0:
         raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
 
+    vol = vol.astype(np.float16)
     patches = []
     for i in range(vol.shape[-1]):
         _sli = vol[..., i]
@@ -45,28 +45,14 @@ def get_patches_per_slice(vol: np.ndarray, patch_size: int):
     return np.array(patches, dtype=np.float16)
 
 
-def get_paths_labels(data_root: str, filter_artifact: str):
-    # Construct `x` and `y` training pairs
-    if filter_artifact in ['b0', 'gibbs', 'nrm', 'rot', 'snr', 'wrap']:
-        glob_pattern = filter_artifact + '*'
-    else:
-        warning = f'Unknown value for filter_artifact. Valid values are b0, snr, wrap and rot.'
-        warning += f'You passed: {filter_artifact}. Globbing all data.'
-        warn(warning)
-        glob_pattern = '*'
-
-    x_paths = []
-    y_labels = []
-    for artifact_folder in Path(data_root).glob(glob_pattern):
-        files = list(artifact_folder.glob('*.npy'))
-        files = list(map(lambda x: str(x), files))  # Convert from Path to str
-        x_paths.extend(files)
+def get_y_labels_unique(data_root: str):
+    y_labels_unique = []
+    for artifact_folder in Path(data_root).glob('*'):
         label = artifact_folder.name
-        if glob_pattern == '*':
-            label = label.rstrip('0123456789').rstrip('-_')
-        y_labels.extend([label] * len(files))
+        label = label.rstrip('0123456789').rstrip('-_')
+        y_labels_unique.append(label)
 
-    return np.array(x_paths), np.array(y_labels)
+    return np.unique(y_labels_unique)
 
 
 def get_paths(data_root: str):
@@ -110,7 +96,7 @@ def load_nifti_vol(path: str):
     return vol
 
 
-def make_generator_train(x, y):
+def make_generator_train(path_train, dict_label_int):
     """
     Training generator indefinitely yielding volumes loaded from .npy files specified in `x`. Also yields paired labels
     from `y`. Every `while` loop iteration counts as one epoch. The data are shuffled at the start of every epoch.
@@ -129,20 +115,21 @@ def make_generator_train(x, y):
     _y : np.ndarray
         Array containing a single corresponding label to the volume yielded in `_x` of datatype np.int8.
     """
-    while True:
-        # Shuffle at the start of every epoch
-        idx = np.arange(len(x))
-        np.random.shuffle(idx)
-        x = x[idx]
-        y = y[idx]
-
-        for counter in range(len(x)):
-            _x = np.load(x[counter])  # Load volume
+    dict_label_int = eval(dict_label_int)
+    for path in path_train:
+        try:
+            path = Path(path.decode().strip())
+            _x = np.load(str(path))  # Load volume
             _x = np.expand_dims(_x, axis=2)  # Convert shape to (..., 1)
             _x = _x.astype(np.float16)  # Mixed precision
 
-            _y = np.array([y[counter]]).astype(np.int8)
+            # y integer label
+            label = path.parent.name
+            label = label.rstrip('0123456789').rstrip('-_')
+            _y = np.array([dict_label_int[label]]).astype(np.int8)
             yield {'input_1': _x, 'input_2': _x}, _y
+        except ValueError:
+            print(path)
 
 
 def make_generator_inference(x):

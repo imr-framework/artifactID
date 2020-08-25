@@ -6,31 +6,29 @@ from datetime import datetime
 from pathlib import Path
 from time import time
 
-import numpy as np
 import tensorflow as tf
-from sklearn.model_selection import train_test_split
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Concatenate, Conv2D, Dense, Flatten, Input, MaxPool2D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import load_model
 
-from artifactID.common.data_ops import get_paths_labels
-from artifactID.common.data_ops import make_generator_train
+from artifactID.common import data_ops
 
 # =========
 # TENSORFLOW CONFIG
 # =========
 # Prevent OOM-related crash
 gpus = tf.config.experimental.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(gpus[0], True)
+if len(gpus) > 0:
+    for g in gpus:
+        tf.config.experimental.set_memory_growth(g, True)
 
 # Mixed precision policy to handle float16 data during training
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, random_seed: int,
-         resume_training: str):
+def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
     if filter_artifact == 'none':  # Was this model trained on all or specific data?
@@ -41,24 +39,8 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         folder.mkdir(parents=True)
 
     # =========
-    # DATA SPLITTING
-    # =========
-    # Get paths and labels
-    x_paths, y_labels = get_paths_labels(data_root=data_root, filter_artifact=filter_artifact)
-    dict_label_int = dict(zip(np.unique(y_labels), itertools.count(0)))  # Map labels to int
-    y_int = np.fromiter(map(lambda label: dict_label_int[label], y_labels), dtype=np.int8)
-
-    # Test split
-    test_pc = 0.10
-    np.random.seed(random_seed)
-    test_idx = np.random.randint(len(x_paths), size=int(test_pc * len(x_paths)))
-    x_paths = np.delete(arr=x_paths, obj=test_idx)
-    y_int = np.delete(y_int, test_idx)
-
-    # Train-val split
-    val_pc = 0.10
-    split = train_test_split(x_paths, y_int, test_size=val_pc, shuffle=True)
-    train_x_paths, val_x_paths, train_y_int, val_y_int = split
+    y_labels_unique = data_ops.get_y_labels_unique(data_root=data_root)  # Get labels
+    dict_label_int = dict(zip(y_labels_unique, itertools.count(0)))  # Map labels to int
 
     # =========
     # MODEL
@@ -74,37 +56,17 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         flatten_1 = Flatten()(conv2d_12)
 
         input_2 = Input(shape=input_output_shape)
-        conv2d_21 = Conv2D(filters=32, kernel_size=5, activation='relu')(input_2)
+        conv2d_21 = Conv2D(filters=32, kernel_size=18, activation='relu')(input_2)
         maxpool_2 = MaxPool2D()(conv2d_21)
-        conv2d_22 = Conv2D(filters=16, kernel_size=5, activation='relu')(maxpool_2)
+        conv2d_22 = Conv2D(filters=16, kernel_size=18, activation='relu')(maxpool_2)
         flatten_2 = Flatten()(conv2d_22)
 
         concat = Concatenate()([flatten_1, flatten_2])
         dense = Dense(units=32, activation='relu')(concat)
-        output = Dense(units=len(np.unique(train_y_int)), activation='softmax')(dense)
+        output = Dense(units=len(y_labels_unique), activation='softmax')(dense)
 
         model = Model(inputs=[input_1, input_2], outputs=output)
         model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
-    # =========
-    # TRAINING
-    # =========
-    train_steps_per_epoch = math.ceil(len(train_x_paths) / batch_size)
-    train_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
-                                                   args=[train_x_paths, train_y_int],
-                                                   output_types=({'input_1': tf.float16, 'input_2': tf.float16},
-                                                                 tf.int8),
-                                                   output_shapes=({'input_1': tf.TensorShape(input_output_shape),
-                                                                   'input_2': tf.TensorShape(input_output_shape)},
-                                                                  tf.TensorShape([1]))).batch(batch_size=batch_size)
-    val_steps_per_epoch = math.ceil(len(val_x_paths) / batch_size)
-    val_dataset = tf.data.Dataset.from_generator(generator=make_generator_train,
-                                                 args=[train_x_paths, train_y_int],
-                                                 output_types=({'input_1': tf.float16, 'input_2': tf.float16},
-                                                               tf.int8),
-                                                 output_shapes=({'input_1': tf.TensorShape(input_output_shape),
-                                                                 'input_2': tf.TensorShape(input_output_shape)},
-                                                                tf.TensorShape([1]))).batch(batch_size=batch_size)
 
     # Model checkpoint callback - checkpoint after every epoch
     path_checkpoint = Path(folder) / 'model.{epoch:02d}.hdf5'
@@ -113,12 +75,39 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                                    monitor='val_acc',
                                                                    mode='max',
                                                                    save_best_only=False)
+    # =========
+    # TRAINING
+    # =========
+    with open(Path(data_root) / 'train.txt', 'r') as f:
+        path_train_npy = f.readlines()
+    train_steps_per_epoch = int(path_train_npy.pop(0))
+    train_steps_per_epoch = math.ceil(train_steps_per_epoch / batch_size)
+
+    with open(Path(data_root) / 'val.txt', 'r') as f:
+        path_val_npy = f.readlines()
+    val_steps_per_epoch = int(path_val_npy.pop(0))
+    val_steps_per_epoch = math.ceil(val_steps_per_epoch / batch_size)
+
+    output_types = ({'input_1': tf.float16,
+                     'input_2': tf.float16},
+                    tf.int8)
+    output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
+                      'input_2': tf.TensorShape(input_output_shape)},
+                     tf.TensorShape([1]))
+    dataset_train = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
+                                                   args=[path_train_npy, str(dict_label_int)],
+                                                   output_types=output_types,
+                                                   output_shapes=output_shapes).batch(batch_size=batch_size)
+    dataset_val = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
+                                                 args=[path_val_npy, str(dict_label_int)],
+                                                 output_types=output_types,
+                                                 output_shapes=output_shapes).batch(batch_size=batch_size)
 
     start = time()
-    history = model.fit(x=train_dataset,
+    history = model.fit(x=dataset_train,
                         callbacks=[model_checkpoint_callback],
                         steps_per_epoch=train_steps_per_epoch,
-                        validation_data=val_dataset,
+                        validation_data=dataset_val,
                         validation_steps=val_steps_per_epoch,
                         epochs=epochs)
     dur = time() - start
@@ -188,7 +177,6 @@ if __name__ == '__main__':
     path_data_root = config_training['path_read_data']  # Path to training data
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
-    random_seed = int(config_training['random_seed'])  # Seed for numpy.random
     resume_training = config_training['resume_training']  # Resume training on pre-trained model
     if resume_training == '':
         resume_training = None
@@ -201,5 +189,4 @@ if __name__ == '__main__':
          epochs=epochs,
          filter_artifact=filter_artifact,
          patch_size=patch_size,
-         random_seed=random_seed,
          resume_training=resume_training)
