@@ -55,27 +55,27 @@ def get_y_labels_unique(data_root: str):
     return np.unique(y_labels_unique)
 
 
-def get_paths(data_root: str):
-    files = list(Path(data_root).glob('**/*'))
-    files = list(map(lambda x: str(x), files))  # Convert from Path to str
+def glob_dicom(path: Path):
+    arr_path = list(path.glob('**'))
+    return arr_path
     return np.array(files)
 
 
-def glob_nifti(path: str):
+def glob_nifti(path: Path):
     path = Path(path)
     arr_path = list(path.glob('**/*.nii.gz'))
     arr_path2 = list(path.glob('**/*.nii'))
     return arr_path + arr_path2
 
 
-def glob_brats_t1(path_brats: str):
+def glob_brats_t1(path_brats: Path):
     path_brats = Path(path_brats)
     arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
     arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
     return arr_path_brats_t1
 
 
-def load_nifti_vol(path: str):
+def load_nifti_vol(path: Path):
     """
     Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal. Ensure correct
     orientation of the brain.
@@ -90,7 +90,7 @@ def load_nifti_vol(path: str):
     numpy.ndarray
         Numpy data of NIFTI file at `path`.
     """
-    vol = nb.load(path).get_fdata()
+    vol = nb.load(str(path)).get_fdata().astype(np.float16)
     vol = np.rot90(vol, -1, axes=(0, 1))  # BraTS: Ensure brain is oriented facing up
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
@@ -161,7 +161,7 @@ def normalize_patches(patches):
     return patches
 
 
-def patch_compatible_zeropad(vol, patch_size):
+def patch_size_compatible_zeropad(vol: np.ndarray, patch_size: int):
     pad = []
     shape = vol.shape
     for s in shape[:2]:  # Pad per slice, not across volume
