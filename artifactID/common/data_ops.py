@@ -96,7 +96,7 @@ def load_nifti_vol(path: Path):
     return vol
 
 
-def make_generator_train(path_train, dict_label_int):
+def generator_train(x, dict_label_int):
     """
     Training generator indefinitely yielding volumes loaded from .npy files specified in `x`. Also yields paired labels
     from `y`. Every `while` loop iteration counts as one epoch. The data are shuffled at the start of every epoch.
@@ -115,8 +115,8 @@ def make_generator_train(path_train, dict_label_int):
     _y : np.ndarray
         Array containing a single corresponding label to the volume yielded in `_x` of datatype np.int8.
     """
-    dict_label_int = eval(dict_label_int)
-    for path in path_train:
+    dict_label_int = eval(dict_label_int)  # Convert str representation of dict into dict object
+    for path in x:
         try:
             path = Path(path.decode().strip())
             _x = np.load(str(path))  # Load volume
@@ -126,7 +126,7 @@ def make_generator_train(path_train, dict_label_int):
             # y integer label
             label = path.parent.name
             label = label.rstrip('0123456789').rstrip('-_')
-            _y = np.array([dict_label_int[label]]).astype(np.int8)
+            _y = np.array([dict_label_int[label]], dtype=np.int8)
             yield {'input_1': _x, 'input_2': _x}, _y
         except ValueError:
             print(path)

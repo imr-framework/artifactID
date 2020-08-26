@@ -39,7 +39,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         folder.mkdir(parents=True)
 
     # =========
-    y_labels_unique = data_ops.get_y_labels_unique(data_root=data_root)  # Get labels
+    y_labels_unique = data_ops.get_y_labels_unique(data_root=Path(data_root))  # Get labels
     dict_label_int = dict(zip(y_labels_unique, itertools.count(0)))  # Map labels to int
 
     # =========
@@ -76,7 +76,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                                    mode='max',
                                                                    save_best_only=False)
     # =========
-    # TRAINING
+    # SET UP TRAINING
     # =========
     with open(Path(data_root) / 'train.txt', 'r') as f:
         path_train_npy = f.readlines()
@@ -94,15 +94,18 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
                       'input_2': tf.TensorShape(input_output_shape)},
                      tf.TensorShape([1]))
-    dataset_train = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
+    dataset_train = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                    args=[path_train_npy, str(dict_label_int)],
                                                    output_types=output_types,
                                                    output_shapes=output_shapes).batch(batch_size=batch_size)
-    dataset_val = tf.data.Dataset.from_generator(generator=data_ops.make_generator_train,
+    dataset_val = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                  args=[path_val_npy, str(dict_label_int)],
                                                  output_types=output_types,
                                                  output_shapes=output_shapes).batch(batch_size=batch_size)
 
+    # =========
+    # TRAINING
+    # =========
     start = time()
     history = model.fit(x=dataset_train,
                         callbacks=[model_checkpoint_callback],
