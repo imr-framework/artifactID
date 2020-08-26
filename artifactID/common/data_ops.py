@@ -8,10 +8,30 @@ from skimage.util import view_as_windows
 from tqdm import tqdm
 
 
-def dcmfolder2npy(path: Path, verbose: bool = True):
-    if not isinstance(path, Path):
-        path = Path(path)
+def __extract_brain(vol: np.ndarray):
+    """
+    Masks a magnitude image by thresholding according to: Jenkinson M. (2003). Fast, automated, N-dimensional
+    phase-unwrapping algorithm. Magnetic resonance in medicine, 49(1), 193–197. https://doi.org/10.1002/mrm.10354
 
+    Parameters
+    ==========
+    vol : np.ndarray
+        Input brain volume
+
+    Returns
+    =======
+    vol_masked : np.ndarray
+           Brain segmented volume
+    """
+    vol_masked = np.zeros_like(vol)
+    threshold = 0.1 * (np.percentile(vol, 98, axis=(0, 1)) - np.percentile(vol, 2, axis=(0, 1))) \
+                + np.percentile(vol, 2, axis=(0, 1))
+    idx = np.where(vol >= threshold)
+    vol_masked[idx] = vol[idx]
+    return vol_masked
+
+
+def dcmfolder2npy(path: Path, verbose: bool = True):
     arr_dcm = list(path.glob('*'))  # List all DICOM files
     arr_npy = []
     for dicom in tqdm(arr_dcm, disable=not verbose):
@@ -28,48 +48,54 @@ def dcmfolder2npy(path: Path, verbose: bool = True):
 
 
 def get_patches_per_slice(vol: np.ndarray, patch_size: int):
-    # Check shape compatibility
-    shape = vol.shape
-    if shape[0] % patch_size != 0 or shape[1] % patch_size != 0:
-        raise Exception(f'Incompatible shapes: {shape} and {patch_size}')
-
-    vol = vol.astype(np.float16)
-    patches = []
-    for i in range(vol.shape[-1]):
-        _sli = vol[..., i]
-        _patches = view_as_windows(arr_in=_sli, window_shape=patch_size, step=patch_size)
-        _patches = _patches.reshape((-1, patch_size, patch_size))
-        for p in _patches:
-            if np.count_nonzero(p) >= 0.75 * p.size and p.max() != p.min():  # Valid patch
-                patches.append(p)
-    return np.array(patches, dtype=np.float16)
+    patches = view_as_windows(arr_in=vol, window_shape=[patch_size, patch_size, 1], step=[patch_size, patch_size, 1])
+    pruned_patches = []
+    patch_map = np.zeros(patches.shape[:3], dtype=np.int8)
+    np_index = np.ndindex(patches.shape[:3])
+    for multi_index in np_index:
+        p = patches[multi_index]
+        p = np.squeeze(p)
+        if np.count_nonzero(p) >= 0.5 * p.size and p.max() != p.min():  # Valid patch
+            pruned_patches.append(p)
+            patch_map[multi_index] = 1
+    return np.array(pruned_patches, dtype=np.float16), patch_map
 
 
-def get_y_labels_unique(data_root: str):
-    y_labels_unique = []
-    for artifact_folder in Path(data_root).glob('*'):
-        label = artifact_folder.name
-        label = label.rstrip('0123456789').rstrip('-_')
-        y_labels_unique.append(label)
+def get_y_labels_unique(data_root: Path):
+    """
 
-    return np.unique(y_labels_unique)
+    Parameters
+    ==========
+    data_root : Path
+
+
+    Returns
+    =======
+    np.ndarray
+
+    """
+    y_labels = []
+    for artifact_folder in data_root.glob('*'):
+        if artifact_folder.is_dir():
+            label = artifact_folder.name
+            label = label.rstrip('0123456789').rstrip('-_')
+            y_labels.append(label)
+
+    return np.unique(y_labels)
 
 
 def glob_dicom(path: Path):
     arr_path = list(path.glob('**'))
     return arr_path
-    return np.array(files)
 
 
 def glob_nifti(path: Path):
-    path = Path(path)
     arr_path = list(path.glob('**/*.nii.gz'))
     arr_path2 = list(path.glob('**/*.nii'))
     return arr_path + arr_path2
 
 
 def glob_brats_t1(path_brats: Path):
-    path_brats = Path(path_brats)
     arr_path_brats_t1 = list(path_brats.glob('**/*.nii.gz'))
     arr_path_brats_t1 = list(filter(lambda x: 't1.nii' in str(x), arr_path_brats_t1))
     return arr_path_brats_t1
@@ -78,7 +104,6 @@ def glob_brats_t1(path_brats: Path):
 def load_nifti_vol(path: Path):
     """
     Read NIFTI file at `path` and return an 3D numpy.ndarray. Ensure correct orientation of the brain.
-    orientation of the brain.
 
     Parameters
     ==========
@@ -132,7 +157,7 @@ def generator_train(x, dict_label_int):
             print(path)
 
 
-def make_generator_inference(x):
+def generator_inference(x: list, file_format: str):
     """
     Inference generator yielding volumes loaded from .npy files specified in `x`.
 
@@ -140,16 +165,30 @@ def make_generator_inference(x):
     ==========
     x : array-like
         Array of paths to .npy files to load.
+    file_format : str
+        File format of
 
     Yields
     ======
     _x : np.ndarray
         Array containing a single volume of shape (..., 1) and datatype np.float16.
     """
-    for counter in range(len(x)):
-        _x = np.load(x[counter])  # Load volume
-        _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
-        yield _x
+    for path_load in x:
+        try:
+            if file_format == 'nifti':
+                _x = nb.load(str(path_load)).get_fdata()
+            elif file_format == 'dicom':
+                _x = dcmfolder2npy(path=path_load)
+            else:
+                raise Exception('Unhandled exception')
+            _x = __extract_brain(vol=_x)
+            _x = _x.astype(np.float16)  # Mixed precision
+            yield _x
+        except ValueError:
+            print(path_load)
+
+
+def normalize_patches(patches: np.ndarray):
     """
     Normalize each patch to lie between [0, 1].
 
@@ -163,9 +202,6 @@ def make_generator_inference(x):
     patches : np.ndarray
         Array of all patches individually normalized to lie between [0, 1].
     """
-
-
-def normalize_patches(patches):
     _max = np.max(patches, axis=(1, 2))
     _min = np.min(patches, axis=(1, 2))
     m3 = _min.reshape((-1, 1, 1))
