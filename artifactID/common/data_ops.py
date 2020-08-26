@@ -77,12 +77,12 @@ def glob_brats_t1(path_brats: Path):
 
 def load_nifti_vol(path: Path):
     """
-    Read NIFTI file at `path` and return an 3D numpy.ndarray. Keep only slices having 5% or more signal. Ensure correct
+    Read NIFTI file at `path` and return an 3D numpy.ndarray. Ensure correct orientation of the brain.
     orientation of the brain.
 
     Parameters
     ==========
-    path : str
+    path : Path
         Path to NIFTI file to be read.
 
     Returns
@@ -98,22 +98,22 @@ def load_nifti_vol(path: Path):
 
 def generator_train(x, dict_label_int):
     """
-    Training generator indefinitely yielding volumes loaded from .npy files specified in `x`. Also yields paired labels
-    from `y`. Every `while` loop iteration counts as one epoch. The data are shuffled at the start of every epoch.
+    Training generator yielding volumes loaded from paths to .npy files in `x`. Also yields paired labels `y`. Labels
+    are derived from the paths to the .npy files in `x`.
 
     Parameters
     ==========
     x : array-like
         Array of paths to .npy files to load.
-    y : array-like, optional
-        Array of labels corresponding to the .npy files to be loaded from `x`.
+    dict_label_int : str
+        Dictionary mapping labels to integers. Used to derive `y` labels for each `x` input to model.
 
     Yields
     ======
-    _x : np.ndarray
-        Array containing a single volume of shape (..., 1) and datatype np.float16.
+    dict{'input_1': np.ndarray, 'input_2': np.ndarray}
+        Dict of two volumes of shape (..., 1) and datatype np.float16.
     _y : np.ndarray
-        Array containing a single corresponding label to the volume yielded in `_x` of datatype np.int8.
+        Array containing a single corresponding label of datatype np.int8.
     """
     dict_label_int = eval(dict_label_int)  # Convert str representation of dict into dict object
     for path in x:
@@ -150,6 +150,19 @@ def make_generator_inference(x):
         _x = np.load(x[counter])  # Load volume
         _x = np.expand_dims(_x, axis=3)  # Convert shape to (x, y, z 1)
         yield _x
+    """
+    Normalize each patch to lie between [0, 1].
+
+    Parameters
+    ==========
+    patches : np.ndarray
+        Array of all patches.
+
+    Returns
+    ======
+    patches : np.ndarray
+        Array of all patches individually normalized to lie between [0, 1].
+    """
 
 
 def normalize_patches(patches):
@@ -162,6 +175,21 @@ def normalize_patches(patches):
 
 
 def patch_size_compatible_zeropad(vol: np.ndarray, patch_size: int):
+    """
+    Zero-pad input volume such that it is compatible for windowing of specified size.
+
+    Parameters
+    ==========
+    vol : np.ndarray
+        Input volume.
+    patch_size : int
+        Patch-size that `vol` needs ot be compatible with for windowing.
+
+    Returns
+    ======
+    np.ndarray
+        Zero-padded volume.
+    """
     pad = []
     shape = vol.shape
     for s in shape[:2]:  # Pad per slice, not across volume
