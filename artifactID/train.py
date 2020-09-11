@@ -8,7 +8,7 @@ from time import time
 
 import tensorflow as tf
 from tensorflow.keras import Model
-from tensorflow.keras.layers import Concatenate, Conv2D, Dense, Flatten, Input, MaxPool2D
+from tensorflow.keras.layers import Conv2D, Dense, Flatten, Input, MaxPool2D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import load_model
 
@@ -31,7 +31,7 @@ mixed_precision.set_policy(policy)
 def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
-    if filter_artifact == 'none':  # Was this model trained on all or specific data?
+    if filter_artifact in ['none', '']:  # Was this model trained on all or specific data?
         folder = Path('output') / f'{time_string}_all'
     else:
         folder = Path('output') / f'{time_string}_{filter_artifact}'
@@ -49,23 +49,16 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     if resume_training is not None:  # Continue training pre-trained model
         model = load_model(resume_training)
     else:  # New model
-        input_1 = Input(shape=input_output_shape)
-        conv2d_11 = Conv2D(filters=32, kernel_size=9, activation='relu')(input_1)
-        maxpool_1 = MaxPool2D()(conv2d_11)
-        conv2d_12 = Conv2D(filters=16, kernel_size=9, activation='relu')(maxpool_1)
-        flatten_1 = Flatten()(conv2d_12)
+        input = Input(shape=input_output_shape)
+        conv2d_1 = Conv2D(filters=8, kernel_size=5, activation='relu')(input)
+        maxpool = MaxPool2D()(conv2d_1)
+        conv2d_2 = Conv2D(filters=8, kernel_size=5, activation='relu')(maxpool)
+        flatten = Flatten()(conv2d_2)
 
-        input_2 = Input(shape=input_output_shape)
-        conv2d_21 = Conv2D(filters=32, kernel_size=18, activation='relu')(input_2)
-        maxpool_2 = MaxPool2D()(conv2d_21)
-        conv2d_22 = Conv2D(filters=16, kernel_size=18, activation='relu')(maxpool_2)
-        flatten_2 = Flatten()(conv2d_22)
-
-        concat = Concatenate()([flatten_1, flatten_2])
-        dense = Dense(units=32, activation='relu')(concat)
+        dense = Dense(units=32, activation='relu')(flatten)
         output = Dense(units=len(y_labels_unique), activation='softmax')(dense)
 
-        model = Model(inputs=[input_1, input_2], outputs=output)
+        model = Model(inputs=input, outputs=output)
         model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     # Model checkpoint callback - checkpoint after every epoch
@@ -88,12 +81,8 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     val_steps_per_epoch = int(path_val_npy.pop(0))
     val_steps_per_epoch = math.ceil(val_steps_per_epoch / batch_size)
 
-    output_types = ({'input_1': tf.float16,
-                     'input_2': tf.float16},
-                    tf.int8)
-    output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
-                      'input_2': tf.TensorShape(input_output_shape)},
-                     tf.TensorShape([1]))
+    output_types = (tf.float16, tf.int8)
+    output_shapes = (tf.TensorShape(input_output_shape), tf.TensorShape([1]))
     dataset_train = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                    args=[path_train_npy, str(dict_label_int)],
                                                    output_types=output_types,
@@ -166,7 +155,9 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
 
 
 if __name__ == '__main__':
-    # Read settings.ini configuration file
+    # =========
+    # READ CONFIG
+    # =========
     path_settings = 'settings.ini'
     config = configparser.ConfigParser()
     config.read(path_settings)
@@ -178,6 +169,10 @@ if __name__ == '__main__':
     filter_artifact = filter_artifact.lower()
     patch_size = int(config_training['patch_size'])  # Patch size
     path_data_root = config_training['path_read_data']  # Path to training data
+
+    # =========
+    # DATA CHECK
+    # =========
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
     resume_training = config_training['resume_training']  # Resume training on pre-trained model
@@ -187,6 +182,8 @@ if __name__ == '__main__':
         raise Exception(
             f'{resume_training} does not exist. If you do not want to resume training on a pre-trained model,'
             f'leave the parameter empty.')
+
+    # Begin training
     main(batch_size=batch_size,
          data_root=path_data_root,
          epochs=epochs,
