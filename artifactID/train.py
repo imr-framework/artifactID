@@ -126,48 +126,33 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # =========
     # SAVE MODEL TO DISK
     # =========
-    # New training
-    if not resume_training:
-        num_epochs = len(history.epoch)
-        acc = history.history['accuracy'][-1]
-        val_acc = history.history['val_accuracy'][-1]
-        write_str = f'{filter_artifact} data\n' \
-                    f'{path_data_root}\n' \
-                    f'{dict_label_int}\n' \
-                    f'{dur} seconds\n' \
-                    f'{batch_size} batch size\n' \
-                    f'{num_epochs} epochs\n' \
-                    f'{acc * 100}% accuracy\n' \
-                    f'{val_acc * 100}% validation accuracy'
+    num_epochs = len(history.epoch)
+    acc = history.history['accuracy'][-1]
+    val_acc = history.history['val_accuracy'][-1]
+    write_str = f'{filter_artifact} data\n' \
+                f'{path_data_root}\n' \
+                f'{dict_label_int}\n' \
+                f'{dur} seconds\n' \
+                f'{batch_size} batch size\n' \
+                f'{num_epochs} epochs\n' \
+                f'{acc * 100}% accuracy\n' \
+                f'{val_acc * 100}% validation accuracy' \
+                f'=========\n'
 
-        with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
-            file.write(write_str)
+    with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
+        file.write(write_str)
+
+        if resume_training is None:  # New training
             # Write model summary to file
             file.write('\n\n')
             model.summary(print_fn=lambda line: file.write(line + '\n'))
-
-        model.save(str(folder / 'model.hdf5'))  # Save model
-    # Resumed training
-    else:
-        num_epochs = len(history.epoch)
-        acc = history.history['accuracy'][-1]
-        val_acc = history.history['val_accuracy'][-1]
-        write_str = f'Resumed training\n' \
-                    f'{filter_artifact} data\n' \
-                    f'{path_data_root}\n' \
-                    f'{dict_label_int}\n' \
-                    f'{dur} seconds\n' \
-                    f'{batch_size} batch size\n' \
-                    f'{num_epochs} epochs\n' \
-                    f'{acc * 100}% accuracy\n' \
-                    f'{val_acc * 100}% validation accuracy' \
-                    f'=========\n'
-
-        with open(str(folder / 'log.txt'), 'a') as file:  # Save training description
+        else:  # Resumed training
+            write_str = f'Resumed training\n' + write_str
             file.write(write_str)
-
-        time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
-        model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
+            
+            time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
+            model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
+            model.save(str(folder / 'model.hdf5'))  # Save model
 
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
         pickle.dump(history.history, pkl)
