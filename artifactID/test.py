@@ -152,14 +152,13 @@ if __name__ == '__main__':
     # =========
     # READ CONFIG
     # =========
-    # Read settings.ini configuration file
     path_settings = 'settings.ini'
     config = configparser.ConfigParser()
     config.read(path_settings)
 
     config_test = config['TEST']
     batch_size = int(config_test['batch_size'])
-    patch_size = int(config_test['patch_size'])  # Patch size
+    patch_size = int(config_test['patch_size'])
     path_pretrained_model = config_test['path_pretrained_model']
     path_read_data = config_test['path_read_data']
     save = bool(config_test['save'])
@@ -183,7 +182,7 @@ if __name__ == '__main__':
         raise ValueError(f'No NIFTI or DICOM files found at {path_read_data}')
 
     # Perform inference
-    main(arr_files=arr_files[:3],
+    main(arr_files=arr_files,
          batch_size=batch_size,
          format=format,
          path_read_data=path_read_data,
