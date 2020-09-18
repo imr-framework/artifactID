@@ -75,6 +75,14 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                                    monitor='val_acc',
                                                                    mode='max',
                                                                    save_best_only=False)
+
+    # Early stopping callback - monitor validation accuracy
+    early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_acc',
+                                                               min_delta=1e-3,
+                                                               patience=5)
+
+    callbacks = [early_stopping_callback, model_checkpoint_callback]
+
     # =========
     # SET UP TRAINING
     # =========
@@ -108,7 +116,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # =========
     start = time()
     history = model.fit(x=dataset_train,
-                        callbacks=[model_checkpoint_callback],
+                        callbacks=callbacks,
                         steps_per_epoch=train_steps_per_epoch,
                         validation_data=dataset_val,
                         validation_steps=val_steps_per_epoch,
