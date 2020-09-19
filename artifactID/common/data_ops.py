@@ -141,7 +141,9 @@ def generator_train(x, dict_label_int):
         Array containing a single corresponding label of datatype np.int8.
     """
     dict_label_int = eval(dict_label_int)  # Convert str representation of dict into dict object
-    for path in x:
+    counter = 0
+    while True:
+        path = x[counter]
         try:
             path = Path(path.decode().strip())
             _x = np.load(str(path))  # Load volume
@@ -155,6 +157,10 @@ def generator_train(x, dict_label_int):
             yield {'input_1': _x, 'input_2': _x}, _y
         except ValueError:
             print(path)
+
+        counter += 1
+        if counter == len(x):  # Reset counter if end of array is reached
+            counter = 0
 
 
 def generator_inference(x: list, file_format: str):
