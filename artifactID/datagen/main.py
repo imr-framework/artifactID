@@ -66,7 +66,7 @@ for _filename, _path in (('train.txt', path_train),
                          ('val.txt', path_val)):
     _path_save = Path(path_save_data) / _filename
     with open(str(_path_save), 'w') as f:
-        f.write(len(_path))
+        f.write(str(len(_path)))
         f.write('\n')
         for x in _path:
             f.write(str(x))

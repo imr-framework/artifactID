@@ -30,7 +30,7 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
     # DATAGEN
     # =========
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
-        vol = data_ops.load_nifti_vol(path_t1)
+        vol = data_ops.load_nifti_vol(path_t1).astype(np.float)  # Convert back to float 32 for CV/PIL compatibility
         rot = arr_rot_range[ind]
         vol_norm = np.zeros(vol.shape)
         vol_norm = cv2.normalize(vol, vol_norm, 0, 255, cv2.NORM_MINMAX)

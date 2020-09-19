@@ -25,6 +25,7 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
 
         vol = data_ops.load_nifti_vol(path=path_t1)
+        vol = vol.astype(np.float32)  # Convert back to float 32 for CV/PIL compatibility
         N = vol.shape[0]
         vol_norm = np.zeros(vol.shape)
         vol_norm = cv2.normalize(vol, vol_norm, 0, 255, cv2.NORM_MINMAX)
@@ -67,6 +68,8 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             kdat_nrm[:, center_lines, :] = kdat_orig[:, center_lines, :]
 
         vol_nrm = np.abs(np.fft.ifftn(np.fft.ifftshift(kdat_nrm)))
+        # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
+        vol_nrm = vol_nrm.astype(np.float16)
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_nrm = data_ops.patch_size_compatible_zeropad(vol=vol_nrm, patch_size=patch_size)

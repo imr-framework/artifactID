@@ -34,6 +34,8 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
         kdat[:, :chop, :] = 0
         kdat[:, -chop:, :] = 0
         vol_gibbs = np.abs(np.fft.ifftn(np.fft.ifftshift(kdat)))
+        # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
+        vol_gibbs = vol_gibbs.astype(np.float16)
 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_gibbs = data_ops.patch_size_compatible_zeropad(vol=vol_gibbs, patch_size=patch_size)
