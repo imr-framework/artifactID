@@ -15,10 +15,12 @@ config = configparser.ConfigParser()
 config.read(path_settings)
 config_data = config['DATAGEN']
 patch_size = int(config_data['patch_size'])
-path_read_data = config_data['path_read_data']
-path_save_data = config_data['path_save_data']
+path_read_data = Path(config_data['path_read_data'])
+path_save_data = Path(config_data['path_save_data'])
 path_ktraj = config_data['path_ktraj']
 path_dcf = config_data['path_dcf']
+test_split = float(config_data['test_split'])
+validation_split = float(config_data['validation_split'])
 
 # No-artifact datagen
 print('No-artifact datagen...')
