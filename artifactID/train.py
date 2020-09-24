@@ -31,10 +31,7 @@ mixed_precision.set_policy(policy)
 def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
-    if filter_artifact == 'none':  # Was this model trained on all or specific data?
-        folder = Path('output') / f'{time_string}_all'
-    else:
-        folder = Path('output') / f'{time_string}_{filter_artifact}'
+    folder = Path('output') / f'{time_string}_{filter_artifact}'
     if not folder.exists():  # Make output/* directory
         folder.mkdir(parents=True)
 
@@ -77,7 +74,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                                                                    save_best_only=False)
 
     # Early stopping callback - monitor validation accuracy
-    early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_acc',
+    early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy',
                                                                min_delta=1e-3,
                                                                patience=5)
 
@@ -124,7 +121,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     dur = time() - start
 
     # =========
-    # SAVE MODEL TO DISK
+    # SAVE TRAINING DESCRIPTION
     # =========
     num_epochs = len(history.epoch)
     acc = history.history['accuracy'][-1]
@@ -149,10 +146,13 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
         else:  # Resumed training
             write_str = f'Resumed training\n' + write_str
             file.write(write_str)
-            
-            time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
-            model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
-            model.save(str(folder / 'model.hdf5'))  # Save model
+
+    # =========
+    # SAVE MODEL TO DISK
+    # =========
+    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
+    model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
+    model.save(str(folder / 'model.hdf5'))  # Save model
 
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
         pickle.dump(history.history, pkl)
@@ -169,6 +169,8 @@ if __name__ == '__main__':
     epochs = int(config_training['epochs'])  # Number of epochs
     filter_artifact = config_training['filter_artifact']  # Train on all data/specific artifact
     filter_artifact = filter_artifact.lower()
+    if filter_artifact == '':
+        filter_artifact = 'all'
     patch_size = int(config_training['patch_size'])  # Patch size
     path_data_root = config_training['path_read_data']  # Path to training data
     if not Path(path_data_root).exists():
