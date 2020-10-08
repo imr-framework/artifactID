@@ -116,7 +116,7 @@ def load_nifti_vol(path: Path):
         Numpy data of NIFTI file at `path`.
     """
     vol = nb.load(str(path)).get_fdata().astype(np.float16)
-    vol = np.rot90(vol, -1, axes=(0, 1))  # BraTS: Ensure brain is oriented facing up
+    vol = __extract_brain(vol)
     vol = (vol - vol.min()) / (vol.max() - vol.min())  # Normalize between 0-1
     return vol
 

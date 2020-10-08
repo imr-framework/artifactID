@@ -93,14 +93,15 @@ def main(path_read_data: Path, path_save_data: Path, path_ktraj: str, path_dcf: 
         # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
         vol_b0 = data_ops.patch_size_compatible_zeropad(vol=vol_b0, patch_size=patch_size)
         patches, _ = data_ops.get_patches_per_slice(vol=vol_b0, patch_size=patch_size)
-        patches = data_ops.normalize_patches(patches=patches)
+        if len(patches) > 0:
+            patches = data_ops.normalize_patches(patches=patches)
 
-        # Save to disk
-        _path_save = path_save_data.joinpath(f'b0{freq}')
-        if not _path_save.exists():
-            _path_save.mkdir(parents=True)
-        for counter, p in enumerate(patches):
-            subject = path_t1.name.replace('.nii.gz', '')
-            _path_save2 = _path_save.joinpath(subject)
-            _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-            np.save(arr=p, file=_path_save2)
+            # Save to disk
+            _path_save = path_save_data.joinpath(f'b0{freq}')
+            if not _path_save.exists():
+                _path_save.mkdir(parents=True)
+            for counter, p in enumerate(patches):
+                subject = path_t1.name.replace('.nii.gz', '')
+                _path_save2 = _path_save.joinpath(subject)
+                _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
+                np.save(arr=p, file=_path_save2)
