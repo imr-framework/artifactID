@@ -28,10 +28,10 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, patch_size: int, resume_training: str):
+def main(batch_size: int, data_root: str, epochs: int, patch_size: int, resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
-    folder = Path('output') / f'{time_string}_{filter_artifact}'
+    folder = Path('output') / f'{time_string}'
     if not folder.exists():  # Make output/* directory
         folder.mkdir(parents=True)
 
@@ -126,8 +126,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     num_epochs = len(history.epoch)
     acc = history.history['accuracy'][-1]
     val_acc = history.history['val_accuracy'][-1]
-    write_str = f'{filter_artifact} data\n' \
-                f'{path_data_root}\n' \
+    write_str = f'{path_data_root}\n' \
                 f'{dict_label_int}\n' \
                 f'{dur} seconds\n' \
                 f'{batch_size} batch size\n' \
@@ -169,10 +168,6 @@ if __name__ == '__main__':
     config_training = config['TRAIN']
     batch_size = int(config_training['batch_size'])  # Batch size
     epochs = int(config_training['epochs'])  # Number of epochs
-    filter_artifact = config_training['filter_artifact']  # Train on all data/specific artifact
-    filter_artifact = filter_artifact.lower()
-    if filter_artifact == '':
-        filter_artifact = 'all'
     patch_size = int(config_training['patch_size'])  # Patch size
     path_data_root = config_training['path_read_data']  # Path to training data
     if not Path(path_data_root).exists():
@@ -187,6 +182,5 @@ if __name__ == '__main__':
     main(batch_size=batch_size,
          data_root=path_data_root,
          epochs=epochs,
-         filter_artifact=filter_artifact,
          patch_size=patch_size,
          resume_training=resume_training)
