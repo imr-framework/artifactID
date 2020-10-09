@@ -185,7 +185,7 @@ if __name__ == '__main__':
         raise ValueError(f'No NIFTI or DICOM files found at {path_read_data}')
 
     # Perform inference
-    main(arr_files=arr_files[:3],
+    main(arr_files=arr_files,
          batch_size=batch_size,
          format=format,
          path_read_data=path_read_data,

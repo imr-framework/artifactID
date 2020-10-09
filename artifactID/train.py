@@ -37,7 +37,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
 
     # =========
     y_labels_unique = data_ops.get_y_labels_unique(data_root=Path(data_root))  # Get labels
-    dict_label_int = dict(zip(y_labels_unique, itertools.count(0)))  # Map labels to int
+    dict_label_int = dict(zip(y_labels_unique, itertools.count(1)))  # Map labels to int
 
     # =========
     # MODEL
@@ -133,7 +133,7 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
                 f'{batch_size} batch size\n' \
                 f'{num_epochs} epochs\n' \
                 f'{acc * 100}% accuracy\n' \
-                f'{val_acc * 100}% validation accuracy' \
+                f'{val_acc * 100}% validation accuracyn\n' \
                 f'=========\n'
 
     with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
@@ -150,9 +150,11 @@ def main(batch_size: int, data_root: str, epochs: int, filter_artifact: str, pat
     # =========
     # SAVE MODEL TO DISK
     # =========
-    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
-    model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
-    model.save(str(folder / 'model.hdf5'))  # Save model
+    if resume_training is None:  # New training
+        model.save(str(folder / 'model.hdf5'))  # Save model
+    else:  # Resumed training
+        time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
+        model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
 
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
         pickle.dump(history.history, pkl)
