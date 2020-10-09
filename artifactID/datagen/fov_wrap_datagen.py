@@ -1,8 +1,8 @@
 import math
+import random
 from pathlib import Path
 
 import numpy as np
-import random
 from tqdm import tqdm
 
 from artifactID.common import data_ops
@@ -38,11 +38,9 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
 
         wrap = arr_wrap_range[ind]
         opacity = 0.5
-        direction = random.choice(['v', 'h', 'sl'])
+        direction = random.choice(['v', 'h', 'sl'])  # vertical, horizontal, slice
 
-        # Find extent of brain along axial
         nonzero_idx = np.nonzero(vol)
-
         # Extract regions and construct overlap
         if direction == 'v':
             first, last = nonzero_idx[0].min(), nonzero_idx[0].max()
@@ -50,7 +48,6 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             top, middle, bottom = vol_cropped[:wrap], vol_cropped[wrap:-wrap], vol_cropped[-wrap:]
             middle[:wrap] += bottom * opacity
             middle[-wrap:] += top * opacity
-
             # Now extract the overlapping regions
             # This is because the central unmodified region should not be classified as FOV wrap-around artifact
             wrap1, wrap2 = middle[:wrap], middle[-wrap:]
@@ -60,7 +57,8 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             left, middle, right = vol_cropped[:, :wrap], vol_cropped[:, wrap:-wrap], vol_cropped[:, -wrap:]
             middle[:, -wrap:] += left * opacity
             middle[:, :wrap] += right * opacity
-
+            # Now extract the overlapping regions
+            # This is because the central unmodified region should not be classified as FOV wrap-around artifact
             wrap1, wrap2 = middle[:, :wrap], middle[:, -wrap:]
 
         elif direction == 'sl':
@@ -68,10 +66,12 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             vol_cropped = vol[:, :, first:last]
             bottom_sl = vol_cropped[:, :, 1:wrap + 1]
             opacity = 0.2 * np.linspace(1, 0.1, wrap)
+            # Now extract the overlapping regions
+            # This is because the central unmodified region should not be classified as FOV wrap-around artifact
             wrap1 = vol_cropped[:, :, -wrap:] + np.flip(bottom_sl * opacity, axis=2)
             wrap2 = np.zeros(wrap1.shape)
 
-        # Now cycle through top and bottom chunks individually
+        # Save overlaps individually
         counter = 0
         for vol in (wrap1, wrap2):
             # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
