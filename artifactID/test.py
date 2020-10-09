@@ -81,7 +81,7 @@ def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_mo
         for p in patches:
             p = p.astype(np.float16)
             p = np.expand_dims(a=p, axis=2)
-            yield {'input_1': p, 'input_2': p}
+            yield p
 
     # Dictionary to map integer predictions back to labels
     dict_label_int = __get_dict_from_log(log=log)
@@ -94,10 +94,8 @@ def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_mo
     print(f'Performing inference...')
     dict_path_pred = dict()
     input_output_shape = (patch_size, patch_size, 1)
-    output_types = ({'input_1': tf.float16,
-                     'input_2': tf.float16})
-    output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
-                      'input_2': tf.TensorShape(input_output_shape)})
+    output_types = (tf.float16)
+    output_shapes = (tf.TensorShape(input_output_shape))
     for counter, vol in enumerate(data_ops.generator_inference(x=arr_files, file_format=format)):
         print(arr_files[counter])
         vol = data_ops.patch_size_compatible_zeropad(vol=vol, patch_size=patch_size)
@@ -154,14 +152,13 @@ if __name__ == '__main__':
     # =========
     # READ CONFIG
     # =========
-    # Read settings.ini configuration file
     path_settings = 'settings.ini'
     config = configparser.ConfigParser()
     config.read(path_settings)
 
     config_test = config['TEST']
     batch_size = int(config_test['batch_size'])
-    patch_size = int(config_test['patch_size'])  # Patch size
+    patch_size = int(config_test['patch_size'])
     path_pretrained_model = config_test['path_pretrained_model']
     path_read_data = config_test['path_read_data']
     save = bool(config_test['save'])

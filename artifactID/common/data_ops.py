@@ -154,7 +154,7 @@ def generator_train(x, dict_label_int):
             label = path.parent.name
             label = label.rstrip('0123456789').rstrip('-_')
             _y = np.array([dict_label_int[label]], dtype=np.int8)
-            yield {'input_1': _x, 'input_2': _x}, _y
+            yield _x, _y
         except ValueError:
             print(path)
 
