@@ -61,7 +61,7 @@ def get_patches_per_slice(vol: np.ndarray, patch_size: int):
     return np.array(pruned_patches, dtype=np.float16), patch_map
 
 
-def get_y_labels_unique(data_root: Path):
+def get_y_labels_unique(data_root: Path) -> list:
     """
 
     Parameters
@@ -81,7 +81,7 @@ def get_y_labels_unique(data_root: Path):
             label = label.rstrip('0123456789').rstrip('-_')
             y_labels.append(label)
 
-    return np.unique(y_labels)
+    return list(np.unique(y_labels))
 
 
 def glob_dicom(path: Path):

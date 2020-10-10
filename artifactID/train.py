@@ -1,5 +1,4 @@
 import configparser
-import itertools
 import math
 import pickle
 from datetime import datetime
@@ -36,8 +35,9 @@ def main(batch_size: int, data_root: str, epochs: int, patch_size: int, resume_t
         folder.mkdir(parents=True)
 
     # =========
-    y_labels_unique = data_ops.get_y_labels_unique(data_root=Path(data_root))  # Get labels
-    dict_label_int = dict(zip(y_labels_unique, itertools.count(1)))  # Map labels to int
+    artifact_label = data_ops.get_y_labels_unique(data_root=Path(data_root))  # Get labels
+    artifact_label.remove('noartifact')  # Remove no artifact label
+    dict_label_int = {'noartifact': 0, artifact_label: 1}  # Map labels to int
 
     # =========
     # MODEL
@@ -60,10 +60,10 @@ def main(batch_size: int, data_root: str, epochs: int, patch_size: int, resume_t
 
         concat = Concatenate()([flatten_1, flatten_2])
         dense = Dense(units=32, activation='relu')(concat)
-        output = Dense(units=len(y_labels_unique), activation='softmax')(dense)
+        output = Dense(units=2, activation='sigmoid')(dense)
 
         model = Model(inputs=[input_1, input_2], outputs=output)
-        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
     # Model checkpoint callback - checkpoint after every epoch
     path_checkpoint = Path(folder) / 'model.{epoch:02d}.hdf5'
