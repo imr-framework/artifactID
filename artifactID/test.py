@@ -38,13 +38,13 @@ def __make_heatmap(patch_map: np.ndarray, patch_size: int, vol: np.ndarray, y_pr
             artifact_map = np.repeat(artifact_map, p, axis=counter)
         all_maps.append(artifact_map)
 
-    # 2x4 film of volumes
-    _row1 = np.concatenate((vol, vol, vol), axis=1)
+    # 1x2 film of volumes
+    film_vol = np.concatenate((vol, vol), axis=1)
     _row2 = np.concatenate((vol, vol, vol), axis=1)
     film_vol = np.concatenate((_row1, _row2), axis=0)
 
-    # 2x4 film of mask overlays; first overlay is zeros to show the original volume as is
-    _row1 = np.concatenate((np.zeros_like(vol), all_maps[0], all_maps[1]), axis=1)
+    # 1x2 film of mask overlays; first overlay is zeros to show the original volume as is
+    film_mask = np.concatenate((np.zeros_like(vol), all_maps[0]), axis=1)
     _row2 = np.concatenate((all_maps[2], all_maps[3], all_maps[4]), axis=1)
     film_mask = np.concatenate((_row1, _row2), axis=0)
 
@@ -52,7 +52,7 @@ def __make_heatmap(patch_map: np.ndarray, patch_size: int, vol: np.ndarray, y_pr
     num_classes = len(y_pred[0])
     threshold = 1 / num_classes
     film_alpha = np.zeros_like(film_vol)
-    film_alpha[film_mask >= threshold] = 0.40
+    film_alpha[film_mask > 0] = 0.40
 
     return film_vol, film_mask, film_alpha
 
