@@ -1,6 +1,7 @@
 import math
 from pathlib import Path
 
+import cv2
 import nibabel as nb
 import numpy as np
 import pydicom as pyd
@@ -194,26 +195,25 @@ def generator_inference(x: list, file_format: str):
             print(path_load)
 
 
-def normalize_patches(patches: np.ndarray):
+def normalize_slices(vol: np.ndarray):
     """
-    Normalize each patch to lie between [0, 1].
+    Normalize each slice to lie between [0, 1].
 
     Parameters
     ==========
-    patches : np.ndarray
-        Array of all patches.
+    vol : np.ndarrays
 
     Returns
     ======
-    patches : np.ndarray
+    vol_normalized : np.ndarray
         Array of all patches individually normalized to lie between [0, 1].
     """
-    _max = np.max(patches, axis=(1, 2))
-    _min = np.min(patches, axis=(1, 2))
-    m3 = _min.reshape((-1, 1, 1))
-    _range = (_max - _min).reshape((-1, 1, 1))
-    patches = (patches - m3) / _range
-    return patches
+    _max = np.max(vol, axis=(0, 1))
+    _min = np.min(vol, axis=(0, 1))
+    _range = (_max - _min)
+    valid_idx = np.where(_max != _min)[0]
+    vol_normalized = (vol[..., valid_idx] - _min[valid_idx]) / _range[valid_idx]
+    return vol_normalized
 
 
 def patch_size_compatible_zeropad(vol: np.ndarray, patch_size: int):
@@ -242,3 +242,13 @@ def patch_size_compatible_zeropad(vol: np.ndarray, patch_size: int):
             pad.append((0, 0))
     pad.append((0, 0))  # Do not pad along last dimension
     return np.pad(array=vol, pad_width=pad)
+
+
+def resize(vol: np.ndarray, size: int):
+    vol_resized = []
+    for i in range(vol.shape[-1]):
+        _slice = vol[..., i]
+        vol_resized.append(cv2.resize(_slice.astype(np.float), (size, size)))
+    vol_resized = np.stack(vol_resized)
+    vol_resized = np.moveaxis(vol_resized, (0, 1, 2), (2, 0, 1))
+    return vol_resized

@@ -94,7 +94,7 @@ def main(path_read_data: Path, path_save_data: Path, path_ktraj: str, path_dcf: 
         vol_b0 = data_ops.patch_size_compatible_zeropad(vol=vol_b0, patch_size=patch_size)
         patches, _ = data_ops.get_patches_per_slice(vol=vol_b0, patch_size=patch_size)
         if len(patches) > 0:
-            patches = data_ops.normalize_patches(patches=patches)
+            patches = data_ops.normalize_slices(patches=patches)
 
             # Save to disk
             _path_save = path_save_data.joinpath(f'b0{freq}')

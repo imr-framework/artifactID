@@ -7,7 +7,7 @@ from tqdm import tqdm
 from artifactID.common import data_ops
 
 
-def main(path_read_data: Path, path_save_data: Path, patch_size: int):
+def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     arr_snr_range = [2, 5, 11, 15, 20]
 
     # =========
@@ -35,21 +35,21 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
         noise = np.random.normal(loc=0, scale=awgn_std, size=vol.size).reshape(vol.shape)
         vol = vol + noise
 
-        # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
-        vol = data_ops.patch_size_compatible_zeropad(vol=vol, patch_size=patch_size)
-        patches, _ = data_ops.get_patches_per_slice(vol=vol, patch_size=patch_size)
-        if len(patches) > 0:
-            patches = data_ops.normalize_patches(patches=patches)
+        vol_resized = data_ops.resize(vol, size=slice_size)
+        # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
+        vol_resized = vol_resized.astype(np.float16)
+        vol_normalized = data_ops.normalize_slices(vol_resized)
 
-            # Save to disk
-            if snr == 2 or snr == 5:
-                snr = 99
-            _path_save = path_save_data.joinpath(f'snr{snr}')
-            if not _path_save.exists():
-                _path_save.mkdir(parents=True)
-            for counter, p in enumerate(patches):
-                suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
-                subject = path_t1.name.replace(suffix, '')
-                _path_save2 = _path_save.joinpath(subject)
-                _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-                np.save(arr=p, file=_path_save2)
+        # Save to disk
+        if snr == 2 or snr == 5:
+            snr = 99
+        _path_save = path_save_data.joinpath(f'snr{snr}')
+        if not _path_save.exists():
+            _path_save.mkdir(parents=True)
+        for i in range(vol_normalized.shape[-1]):
+            _slice = vol[..., i]
+            suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+            subject = path_t1.name.replace(suffix, '')
+            _path_save2 = _path_save.joinpath(subject)
+            _path_save2 = str(_path_save2) + f'_slice{i}.npy'
+            np.save(arr=_slice, file=_path_save2)

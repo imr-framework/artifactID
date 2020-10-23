@@ -7,7 +7,7 @@ from tqdm import tqdm
 from artifactID.common import data_ops
 
 
-def main(path_read_data: Path, path_save_data: Path, patch_size: int):
+def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     arr_gibbs_range = [52, 64, 76]
     # =========
     # PATHS
@@ -27,28 +27,25 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
     # DATAGEN
     # =========
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
-        vol = data_ops.load_nifti_vol(path=path_t1)
+        vol = data_ops.load_nifti_vol(path_t1)
+        vol_resized = data_ops.resize(vol, size=slice_size)
         chop = arr_gibbs_range[ind]
 
-        kdat = np.fft.fftshift(np.fft.fftn(vol))
+        kdat = np.fft.fftshift(np.fft.fftn(vol_resized))
         kdat[:, :chop, :] = 0
         kdat[:, -chop:, :] = 0
         vol_gibbs = np.abs(np.fft.ifftn(np.fft.ifftshift(kdat)))
         # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
         vol_gibbs = vol_gibbs.astype(np.float16)
+        vol_gibbs_normalized = data_ops.normalize_slices(vol=vol_gibbs)
 
-        # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
-        vol_gibbs = data_ops.patch_size_compatible_zeropad(vol=vol_gibbs, patch_size=patch_size)
-        patches, _ = data_ops.get_patches_per_slice(vol=vol_gibbs, patch_size=patch_size)
-        if len(patches) > 0:
-            patches = data_ops.normalize_patches(patches=patches)
-
-            # Save to disk
-            _path_save = path_save_data.joinpath(f'gibbs{chop}')
-            if not _path_save.exists():
-                _path_save.mkdir(parents=True)
-            for counter, p in enumerate(patches):
-                subject = path_t1.name.replace('.nii.gz', '')
-                _path_save2 = _path_save.joinpath(subject)
-                _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-                np.save(arr=p, file=_path_save2)
+        # Save to disk
+        _path_save = path_save_data.joinpath(f'gibbs{chop}')
+        if not _path_save.exists():
+            _path_save.mkdir(parents=True)
+        for i in range(vol_gibbs_normalized.shape[-1]):
+            _slice = vol[..., i]
+            subject = path_t1.name.replace('.nii.gz', '')
+            _path_save2 = _path_save.joinpath(subject)
+            _path_save2 = str(_path_save2) + f'_slice{i}.npy'
+            np.save(arr=_slice, file=_path_save2)

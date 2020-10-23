@@ -6,7 +6,7 @@ from tqdm import tqdm
 from artifactID.common import data_ops
 
 
-def main(path_read_data: Path, path_save_data: Path, patch_size: int):
+def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     # =========
     # PATHS
     # =========
@@ -23,17 +23,15 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
     # =========
     for path_t1 in tqdm(arr_path_read):
         vol = data_ops.load_nifti_vol(path_t1)
+        vol_resized = data_ops.resize(vol, size=slice_size)
+        vol_resized = vol_resized.astype(np.float16)
+        vol_normalized = data_ops.normalize_slices(vol_resized)
 
-        # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
-        vol = data_ops.patch_size_compatible_zeropad(vol=vol, patch_size=patch_size)
-        patches, _ = data_ops.get_patches_per_slice(vol=vol, patch_size=patch_size)
-        if len(patches) > 0:
-            patches = data_ops.normalize_patches(patches=patches)
-
-            # Save to disk
-            for counter, p in enumerate(patches):
-                suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
-                subject = path_t1.name.replace(suffix, '')
-                _path_save = path_save_data.joinpath(subject)
-                _path_save = str(_path_save) + f'_patch{counter}.npy'
-                np.save(arr=p, file=_path_save)
+        # Save to disk
+        for i in range(vol_normalized.shape[-1]):
+            _slice = vol[..., i]
+            suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+            subject = path_t1.name.replace(suffix, '')
+            _path_save = path_save_data.joinpath(subject)
+            _path_save = str(_path_save) + f'_slice{i}.npy'
+            np.save(arr=_slice, file=_path_save)
