@@ -8,7 +8,7 @@ from tqdm import tqdm
 from artifactID.common import data_ops
 
 
-def main(path_read_data: Path, path_save_data: Path, patch_size: int):
+def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     arr_wrap_range = [15, 20, 25, 30, 35]
 
     # =========
@@ -21,20 +21,16 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
     path_save_data = Path(path_save_data)
     subjects_per_class = math.ceil(
         len(arr_path_read) / len(arr_wrap_range))  # Calculate number of subjects per class
-    # arr_wrap_range = arr_wrap_range * subjects_per_class
+
     arr_wrap_range = np.tile(arr_wrap_range, subjects_per_class)
-    # np.random.shuffle(arr_wrap_range)
+    np.random.shuffle(arr_wrap_range)
 
     # =========
     # DATAGEN
     # =========
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
         vol = data_ops.load_nifti_vol(path_t1)
-        # TODO: remove hardcoding
-        vol = np.rot90(np.moveaxis(vol, 0, -1), 2)
-        zero_pad = int((vol.shape[0] - vol.shape[1]) / 2)
-        vol = np.hstack(
-            (np.zeros((vol.shape[0], zero_pad, vol.shape[2])), vol, np.zeros((vol.shape[0], zero_pad, vol.shape[2]))))
+        vol_resized = data_ops.resize(vol, size=slice_size)
 
         wrap = arr_wrap_range[ind]
         opacity = 0.5
@@ -50,7 +46,9 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             middle[-wrap:] += top * opacity
             # Now extract the overlapping regions
             # This is because the central unmodified region should not be classified as FOV wrap-around artifact
-            wrap1, wrap2 = middle[:wrap], middle[-wrap:]
+            #wrap1, wrap2 = middle[:wrap], middle[-wrap:]
+            vol_wrapped = middle
+
         elif direction == 'h':
             first, last = nonzero_idx[1].min(), nonzero_idx[1].max()
             vol_cropped = vol[:, first:last]
@@ -59,7 +57,8 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             middle[:, :wrap] += right * opacity
             # Now extract the overlapping regions
             # This is because the central unmodified region should not be classified as FOV wrap-around artifact
-            wrap1, wrap2 = middle[:, :wrap], middle[:, -wrap:]
+            #wrap1, wrap2 = middle[:, :wrap], middle[:, -wrap:]
+            vol_wrapped = middle
 
         elif direction == 'sl':
             first, last = nonzero_idx[1].min(), nonzero_idx[1].max()
@@ -68,26 +67,21 @@ def main(path_read_data: Path, path_save_data: Path, patch_size: int):
             opacity = 0.2 * np.linspace(1, 0.1, wrap)
             # Now extract the overlapping regions
             # This is because the central unmodified region should not be classified as FOV wrap-around artifact
-            wrap1 = vol_cropped[:, :, -wrap:] + np.flip(bottom_sl * opacity, axis=2)
-            wrap2 = np.zeros(wrap1.shape)
+            vol_wrapped = vol_cropped[:, :, -wrap:] + np.flip(bottom_sl * opacity, axis=2)
 
-        # Save overlaps individually
-        counter = 0
-        for vol in (wrap1, wrap2):
-            # Zero-pad vol, get patches, discard empty patches and uniformly intense patches and normalize each patch
-            vol = data_ops.patch_size_compatible_zeropad(vol=vol, patch_size=patch_size)
-            patches, _ = data_ops.get_patches_per_slice(vol=vol, patch_size=patch_size)
-            if len(patches) > 0:
-                patches = data_ops.normalize_slices(patches=patches)
+        # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
+        vol_wrapped = vol_wrapped.astype(np.float16)
+        vol_wrapped_normalized = data_ops.normalize_slices(vol=vol_wrapped)
 
-                # Save to disk
-                _path_save = path_save_data.joinpath(f'wrap{wrap}')
-                if not _path_save.exists():
-                    _path_save.mkdir(parents=True)
-                for p in patches:
-                    suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
-                    subject = path_t1.name.replace(suffix, '')
-                    _path_save2 = _path_save.joinpath(subject)
-                    _path_save2 = str(_path_save2) + f'_patch{counter}.npy'
-                    np.save(arr=p, file=_path_save2)
-                    counter += 1
+        # Save to disk
+        _path_save = path_save_data.joinpath(f'wrap{wrap}')
+        if not _path_save.exists():
+            _path_save.mkdir(parents=True)
+        for i in range(vol_wrapped_normalized.shape[-1]):
+            _slice = vol_wrapped_normalized[..., i]
+            suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
+            subject = path_t1.name.replace(suffix, '')
+            _path_save2 = _path_save.joinpath(subject)
+            _path_save2 = str(_path_save2) + f'_slice{i}.npy'
+            np.save(arr=_slice, file=_path_save2)
+
