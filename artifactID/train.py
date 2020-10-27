@@ -7,7 +7,7 @@ from time import time
 
 import tensorflow as tf
 from tensorflow.keras import Model
-from tensorflow.keras.layers import Concatenate, Conv2D, Dense, Flatten, Input, MaxPool2D
+from tensorflow.keras.layers import Concatenate, Conv2D, Input, MaxPool2D, UpSampling2D
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.keras.models import load_model
 
@@ -27,7 +27,7 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 
-def main(batch_size: int, data_root: str, epochs: int, patch_size: int, resume_training: str):
+def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_training: str):
     # Make save destination
     time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
     folder = Path('output') / f'{time_string}'
@@ -35,34 +35,63 @@ def main(batch_size: int, data_root: str, epochs: int, patch_size: int, resume_t
         folder.mkdir(parents=True)
 
     # =========
-    artifact_label = data_ops.get_y_labels_unique(data_root=Path(data_root))  # Get labels
-    artifact_label.remove('noartifact')  # Remove no artifact label
+    artifact_label = data_ops.get_y_label(data_root=Path(data_root))  # Get labels
     dict_label_int = {'noartifact': 0, artifact_label: 1}  # Map labels to int
 
     # =========
     # MODEL
     # =========
-    input_output_shape = (patch_size, patch_size, 1)
+    input_shape = (input_shape, input_shape, 1)
     if resume_training is not None:  # Continue training pre-trained model
         model = load_model(resume_training)
     else:  # New model
-        input_1 = Input(shape=input_output_shape)
-        conv2d_11 = Conv2D(filters=32, kernel_size=9, activation='relu')(input_1)
-        maxpool_1 = MaxPool2D()(conv2d_11)
-        conv2d_12 = Conv2D(filters=16, kernel_size=9, activation='relu')(maxpool_1)
-        flatten_1 = Flatten()(conv2d_12)
+        inputs = Input(input_shape)
 
-        input_2 = Input(shape=input_output_shape)
-        conv2d_21 = Conv2D(filters=32, kernel_size=18, activation='relu')(input_2)
-        maxpool_2 = MaxPool2D()(conv2d_21)
-        conv2d_22 = Conv2D(filters=16, kernel_size=18, activation='relu')(maxpool_2)
-        flatten_2 = Flatten()(conv2d_22)
+        conv1_1 = Conv2D(64, 3, activation='relu', padding='same')(inputs)
+        conv1_2 = Conv2D(64, 3, activation='relu', padding='same')(conv1_1)
+        pool1 = MaxPool2D(pool_size=(2, 2))(conv1_2)
 
-        concat = Concatenate()([flatten_1, flatten_2])
-        dense = Dense(units=32, activation='relu')(concat)
-        output = Dense(units=2, activation='sigmoid')(dense)
+        conv2_1 = Conv2D(128, 3, activation='relu', padding='same')(pool1)
+        conv2_2 = Conv2D(128, 3, activation='relu', padding='same')(conv2_1)
+        pool2 = MaxPool2D(pool_size=(2, 2))(conv2_2)
 
-        model = Model(inputs=[input_1, input_2], outputs=output)
+        conv3_1 = Conv2D(256, 3, activation='relu', padding='same')(pool2)
+        conv3_2 = Conv2D(256, 3, activation='relu', padding='same')(conv3_1)
+        pool3 = MaxPool2D(pool_size=(2, 2))(conv3_2)
+
+        conv4_1 = Conv2D(512, 3, activation='relu', padding='same')(pool3)
+        conv4_2 = Conv2D(512, 3, activation='relu', padding='same')(conv4_1)
+        pool4 = MaxPool2D(pool_size=(2, 2))(conv4_2)
+
+        conv5_1 = Conv2D(1024, 3, activation='relu', padding='same')(pool4)
+        conv5_2 = Conv2D(1024, 3, activation='relu', padding='same')(conv5_1)
+
+        up1 = Conv2D(512, 2, activation='relu', padding='same')(
+            UpSampling2D(size=(2, 2))(conv5_2))
+        merge1 = Concatenate(axis=3)([conv4_2, up1])
+        conv6_1 = Conv2D(512, 3, activation='relu', padding='same')(merge1)
+        conv6_2 = Conv2D(512, 3, activation='relu', padding='same')(conv6_1)
+
+        up2 = Conv2D(256, 2, activation='relu', padding='same')(
+            UpSampling2D(size=(2, 2))(conv6_2))
+        merge2 = Concatenate(axis=3)([conv3_2, up2])
+        conv7_1 = Conv2D(256, 3, activation='relu', padding='same')(merge2)
+        conv7_2 = Conv2D(256, 3, activation='relu', padding='same')(conv7_1)
+
+        up3 = Conv2D(128, 2, activation='relu', padding='same')(
+            UpSampling2D(size=(2, 2))(conv7_2))
+        merge3 = Concatenate(axis=3)([conv2_2, up3])
+        conv8_1 = Conv2D(128, 3, activation='relu', padding='same')(merge3)
+        conv8_2 = Conv2D(128, 3, activation='relu', padding='same')(conv8_1)
+
+        up4 = Conv2D(64, 2, activation='relu', padding='same')(
+            UpSampling2D(size=(2, 2))(conv8_2))
+        merge4 = Concatenate(axis=3)([conv1_2, up4])
+        conv9_1 = Conv2D(64, 3, activation='relu', padding='same')(merge4)
+        conv9_2 = Conv2D(64, 3, activation='relu', padding='same')(conv9_1)
+        conv9_3 = Conv2D(1, 1, activation='relu', padding='same')(conv9_2)
+
+        model = Model(inputs, conv9_3)
         model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
     # Model checkpoint callback - checkpoint after every epoch
@@ -93,12 +122,8 @@ def main(batch_size: int, data_root: str, epochs: int, patch_size: int, resume_t
     val_steps_per_epoch = int(path_val_npy.pop(0))
     val_steps_per_epoch = math.ceil(val_steps_per_epoch / batch_size)
 
-    output_types = ({'input_1': tf.float16,
-                     'input_2': tf.float16},
-                    tf.int8)
-    output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
-                      'input_2': tf.TensorShape(input_output_shape)},
-                     tf.TensorShape([1]))
+    output_types = (tf.float16, tf.int8)
+    output_shapes = (tf.TensorShape(input_shape), tf.TensorShape([1]))
     dataset_train = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                    args=[path_train_npy, str(dict_label_int)],
                                                    output_types=output_types,
@@ -168,7 +193,7 @@ if __name__ == '__main__':
     config_training = config['TRAIN']
     batch_size = int(config_training['batch_size'])  # Batch size
     epochs = int(config_training['epochs'])  # Number of epochs
-    patch_size = int(config_training['patch_size'])  # Patch size
+    input_shape = int(config_training['input_shape'])  # Size of each slice
     path_data_root = config_training['path_read_data']  # Path to training data
     if not Path(path_data_root).exists():
         raise Exception(f'{path_data_root} does not exist')
@@ -182,5 +207,5 @@ if __name__ == '__main__':
     main(batch_size=batch_size,
          data_root=path_data_root,
          epochs=epochs,
-         patch_size=patch_size,
+         input_shape=input_shape,
          resume_training=resume_training)

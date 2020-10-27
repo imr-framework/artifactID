@@ -62,7 +62,7 @@ def get_patches_per_slice(vol: np.ndarray, patch_size: int):
     return np.array(pruned_patches, dtype=np.float16), patch_map
 
 
-def get_y_labels_unique(data_root: Path) -> list:
+def get_y_label(data_root: Path) -> str:
     """
 
     Parameters
@@ -82,7 +82,11 @@ def get_y_labels_unique(data_root: Path) -> list:
             label = label.rstrip('0123456789').rstrip('-_')
             y_labels.append(label)
 
-    return list(np.unique(y_labels))
+    y_labels.remove('noartifact')  # Remove no artifact label
+    y_labels = np.unique(y_labels)
+    if len(y_labels) > 2:
+        raise Exception('Too many artifact classes, expected only no-artifact and one other artifact class.')
+    return y_labels[0]
 
 
 def glob_dicom(path: Path):
@@ -155,7 +159,7 @@ def generator_train(x, dict_label_int):
             label = path.parent.name
             label = label.rstrip('0123456789').rstrip('-_')
             _y = np.array([dict_label_int[label]], dtype=np.int8)
-            yield {'input_1': _x, 'input_2': _x}, _y
+            yield _x, _y
         except ValueError:
             print(path)
 
