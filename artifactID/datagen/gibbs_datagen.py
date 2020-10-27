@@ -44,7 +44,7 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for i in range(vol_gibbs_normalized.shape[-1]):
-            _slice = vol[..., i]
+            _slice = vol_gibbs_normalized[..., i]
             subject = path_t1.name.replace('.nii.gz', '')
             _path_save2 = _path_save.joinpath(subject)
             _path_save2 = str(_path_save2) + f'_slice{i}.npy'

@@ -24,12 +24,13 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     for path_t1 in tqdm(arr_path_read):
         vol = data_ops.load_nifti_vol(path_t1)
         vol_resized = data_ops.resize(vol, size=slice_size)
+        # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
         vol_resized = vol_resized.astype(np.float16)
         vol_normalized = data_ops.normalize_slices(vol_resized)
 
         # Save to disk
         for i in range(vol_normalized.shape[-1]):
-            _slice = vol[..., i]
+            _slice = vol_normalized[..., i]
             suffix = '.nii.gz' if '.nii.gz' in path_t1.name else '.nii'
             subject = path_t1.name.replace(suffix, '')
             _path_save = path_save_data.joinpath(subject)
