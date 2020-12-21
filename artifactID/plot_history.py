@@ -13,7 +13,7 @@ def main(path_history: str):
     path_history : str
         Path to pickle containing training history.
     """
-    with open(path_history, 'rb') as pkl: # Read history pickle
+    with open(path_history, 'rb') as pkl:  # Read history pickle
         history = pickle.load(pkl)
 
     # Plot
@@ -33,13 +33,13 @@ def main(path_history: str):
     plt.ylabel('Training accuracy')
     plt.title('Training accuracy vs epochs')
 
-    plt.figure()
-    loss = history['val_accuracy']
-    plt.plot(range(1, len(loss) + 1), loss)
-    plt.plot(range(1, len(loss) + 1), loss, '.')
-    plt.xlabel('Epochs')
-    plt.ylabel('Validation accuracy')
-    plt.title('Validation accuracy vs epochs')
+    # plt.figure()
+    # loss = history['val_loss']
+    # plt.plot(range(1, len(loss) + 1), loss)
+    # plt.plot(range(1, len(loss) + 1), loss, '.')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('Validation accuracy')
+    # plt.title('Validation accuracy vs epochs')
 
     plt.show()
 

@@ -38,6 +38,10 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
         # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
         vol_snr_resized = vol_snr.astype(np.float16)
         vol_snr_normalized = data_ops.normalize_slices(vol_snr_resized)
+        from matplotlib import pyplot as plt
+        plt.imshow(vol_snr_normalized[..., 150].astype(np.float), cmap='gray')
+        plt.axis('off')
+        plt.savefig(r'C:\Users\sravan953\Documents\CU\Data\IXI002-Guys-0828-T1\snr.jpg')
 
         # Save to disk
         if snr == 2 or snr == 5:

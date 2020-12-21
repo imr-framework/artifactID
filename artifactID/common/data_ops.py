@@ -9,7 +9,7 @@ from skimage.util import view_as_windows
 from tqdm import tqdm
 
 
-def __extract_brain(vol: np.ndarray):
+def __extract_brain(vol: np.ndarray, return_idx: bool = False):
     """
     Masks a magnitude image by thresholding according to: Jenkinson M. (2003). Fast, automated, N-dimensional
     phase-unwrapping algorithm. Magnetic resonance in medicine, 49(1), 193–197. https://doi.org/10.1002/mrm.10354
@@ -29,6 +29,9 @@ def __extract_brain(vol: np.ndarray):
                 + np.percentile(vol, 2, axis=(0, 1))
     idx = np.where(vol >= threshold)
     vol_masked[idx] = vol[idx]
+
+    if return_idx:
+        return vol_masked, idx
     return vol_masked
 
 
@@ -90,7 +93,7 @@ def get_y_label(data_root: Path) -> str:
 
 
 def glob_dicom(path: Path):
-    arr_path = list(path.glob('**'))
+    arr_path = list(path.glob('**\*.dcm'))
     return arr_path
 
 
@@ -145,30 +148,32 @@ def generator_train(x, dict_label_int):
     _y : np.ndarray
         Array containing a single corresponding label of datatype np.int8.
     """
-    dict_label_int = eval(dict_label_int)  # Convert str representation of dict into dict object
     counter = 0
     while True:
         path = x[counter]
         try:
             path = Path(path.decode().strip())
             _x = np.load(str(path))  # Load volume
+            _x = np.abs(np.fft.fftshift(np.fft.fftn(_x)))
+            _x = np.squeeze(_x)
             _x = np.expand_dims(_x, axis=2)  # Convert shape to (..., 1)
             _x = _x.astype(np.float16)  # Mixed precision
 
             # y integer label
-            label = path.parent.name
-            label = label.rstrip('0123456789').rstrip('-_')
-            _y = np.array([dict_label_int[label]], dtype=np.int8)
+            if 'gibbs' in path.parent.name.lower():
+                _y = np.array([1], dtype=np.int8)
+            elif 'noartifact' in path.parent.name.lower():
+                _y = np.array([0], dtype=np.int8)
             yield _x, _y
-        except ValueError:
-            print(path)
+        except Exception as e:
+            print(e)
 
         counter += 1
         if counter == len(x):  # Reset counter if end of array is reached
             counter = 0
 
 
-def generator_inference(x: list, file_format: str):
+def generator_evaluate(x: list, file_format: str):
     """
     Inference generator yielding volumes loaded from .npy files specified in `x`.
 
@@ -194,9 +199,45 @@ def generator_inference(x: list, file_format: str):
                 raise Exception('Unhandled exception')
             _x = __extract_brain(vol=_x)
             _x = _x.astype(np.float16)  # Mixed precision
-            yield _x
+            yield _x, path_load.parent.parts[-1]
         except ValueError:
             print(path_load)
+
+
+def generator_inference(x: list):
+    """
+    Inference generator yielding volumes loaded from .npy files specified in `x`.
+
+    Parameters
+    ==========
+    x : array-like
+        Array of paths to .npy files to load.
+    file_format : str
+        File format of
+
+    Yields
+    ======
+    _x : np.ndarray
+        Array containing a single volume of shape (..., 1) and datatype np.float16.
+    """
+    counter = 0
+    while True:
+        path = x[counter]
+        try:
+            path = Path(path.decode().strip())
+            _x = np.load(str(path))  # Load volume
+            _x = np.abs(np.fft.fftshift(np.fft.fftn(_x)))
+            _x = np.squeeze(_x)
+            _x = np.expand_dims(_x, axis=2)  # Convert shape to (..., 1)
+            _x = _x.astype(np.float16)  # Mixed precision
+
+            yield _x
+        except Exception as e:
+            print(e)
+
+        counter += 1
+        if counter == len(x):  # Reset counter if end of array is reached
+            break
 
 
 def normalize_slices(vol: np.ndarray):
@@ -248,11 +289,5 @@ def patch_size_compatible_zeropad(vol: np.ndarray, patch_size: int):
     return np.pad(array=vol, pad_width=pad)
 
 
-def resize(vol: np.ndarray, size: int):
-    vol_resized = []
-    for i in range(vol.shape[-1]):
-        _slice = vol[..., i]
-        vol_resized.append(cv2.resize(_slice.astype(np.float), (size, size)))
-    vol_resized = np.stack(vol_resized)
-    vol_resized = np.moveaxis(vol_resized, (0, 1, 2), (2, 0, 1))
-    return vol_resized
+def resize(sli: np.ndarray, size: int):
+    return cv2.resize(sli.astype(np.float), (size, size))

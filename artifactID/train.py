@@ -6,16 +6,20 @@ from pathlib import Path
 from time import time
 
 import tensorflow as tf
-from tensorflow.keras import Model
-from tensorflow.keras.layers import Concatenate, Conv2D, Input, MaxPool2D, UpSampling2D
-from tensorflow.keras.mixed_precision import experimental as mixed_precision
+from tensorflow.keras.layers import Conv2D, Flatten, Dense
+from tensorflow.keras.layers import MaxPooling2D
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import load_model
+from tensorflow.keras.optimizers import Adam
 
 from artifactID.common import data_ops
 
 # =========
 # TENSORFLOW CONFIG
 # =========
+# Set seed
+tf.random.set_seed(953)
+
 # Prevent OOM-related crash
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if len(gpus) > 0:
@@ -23,8 +27,9 @@ if len(gpus) > 0:
         tf.config.experimental.set_memory_growth(g, True)
 
 # Mixed precision policy to handle float16 data during training
-policy = mixed_precision.Policy('mixed_float16')
-mixed_precision.set_policy(policy)
+# policy = mixed_precision.Policy('mixed_float16')
+# mixed_precision.set_policy(policy)
+"""DOES NOT WORK WITH L1 REGULARIZERS"""
 
 
 def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_training: str):
@@ -35,8 +40,7 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
         folder.mkdir(parents=True)
 
     # =========
-    artifact_label = data_ops.get_y_label(data_root=Path(data_root))  # Get labels
-    dict_label_int = {'noartifact': 0, artifact_label: 1}  # Map labels to int
+    dict_label_int = {'noartifact': 0, 'gibbs': 1}  # Map labels to int
 
     # =========
     # MODEL
@@ -45,54 +49,22 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     if resume_training is not None:  # Continue training pre-trained model
         model = load_model(resume_training)
     else:  # New model
-        inputs = Input(input_shape)
+        model = Sequential()
+        model.add(Conv2D(256, (3, 3), input_shape=(256, 256, 1), activation='relu'))
+        model.add(MaxPooling2D((4, 4)))
+        model.add(Conv2D(288, (3, 3), activation='relu'))
+        model.add(MaxPooling2D((4, 4)))
+        model.add(Conv2D(288, (3, 3), activation='relu'))
 
-        conv1_1 = Conv2D(64, 3, activation='relu', padding='same')(inputs)
-        conv1_2 = Conv2D(64, 3, activation='relu', padding='same')(conv1_1)
-        pool1 = MaxPool2D(pool_size=(2, 2))(conv1_2)
+        model.add(Flatten())
+        model.add(Dense(128, activation='relu', kernel_regularizer='l1'))
+        model.add(Dense(96, activation='relu', kernel_regularizer='l1'))
+        model.add(Dense(16, activation='relu', kernel_regularizer='l1'))
+        model.add(Dense(2))
 
-        conv2_1 = Conv2D(128, 3, activation='relu', padding='same')(pool1)
-        conv2_2 = Conv2D(128, 3, activation='relu', padding='same')(conv2_1)
-        pool2 = MaxPool2D(pool_size=(2, 2))(conv2_2)
-
-        conv3_1 = Conv2D(256, 3, activation='relu', padding='same')(pool2)
-        conv3_2 = Conv2D(256, 3, activation='relu', padding='same')(conv3_1)
-        pool3 = MaxPool2D(pool_size=(2, 2))(conv3_2)
-
-        conv4_1 = Conv2D(512, 3, activation='relu', padding='same')(pool3)
-        conv4_2 = Conv2D(512, 3, activation='relu', padding='same')(conv4_1)
-        pool4 = MaxPool2D(pool_size=(2, 2))(conv4_2)
-
-        conv5_1 = Conv2D(1024, 3, activation='relu', padding='same')(pool4)
-        conv5_2 = Conv2D(1024, 3, activation='relu', padding='same')(conv5_1)
-
-        up1 = Conv2D(512, 2, activation='relu', padding='same')(
-            UpSampling2D(size=(2, 2))(conv5_2))
-        merge1 = Concatenate(axis=3)([conv4_2, up1])
-        conv6_1 = Conv2D(512, 3, activation='relu', padding='same')(merge1)
-        conv6_2 = Conv2D(512, 3, activation='relu', padding='same')(conv6_1)
-
-        up2 = Conv2D(256, 2, activation='relu', padding='same')(
-            UpSampling2D(size=(2, 2))(conv6_2))
-        merge2 = Concatenate(axis=3)([conv3_2, up2])
-        conv7_1 = Conv2D(256, 3, activation='relu', padding='same')(merge2)
-        conv7_2 = Conv2D(256, 3, activation='relu', padding='same')(conv7_1)
-
-        up3 = Conv2D(128, 2, activation='relu', padding='same')(
-            UpSampling2D(size=(2, 2))(conv7_2))
-        merge3 = Concatenate(axis=3)([conv2_2, up3])
-        conv8_1 = Conv2D(128, 3, activation='relu', padding='same')(merge3)
-        conv8_2 = Conv2D(128, 3, activation='relu', padding='same')(conv8_1)
-
-        up4 = Conv2D(64, 2, activation='relu', padding='same')(
-            UpSampling2D(size=(2, 2))(conv8_2))
-        merge4 = Concatenate(axis=3)([conv1_2, up4])
-        conv9_1 = Conv2D(64, 3, activation='relu', padding='same')(merge4)
-        conv9_2 = Conv2D(64, 3, activation='relu', padding='same')(conv9_1)
-        conv9_3 = Conv2D(1, 1, activation='relu', padding='same')(conv9_2)
-
-        model = Model(inputs, conv9_3)
-        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=Adam(),
+                      loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                      metrics=['accuracy'])
 
     # Model checkpoint callback - checkpoint after every epoch
     path_checkpoint = Path(folder) / 'model.{epoch:02d}.hdf5'
@@ -102,12 +74,7 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
                                                                    mode='max',
                                                                    save_best_only=False)
 
-    # Early stopping callback - monitor validation accuracy
-    early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy',
-                                                               min_delta=1e-3,
-                                                               patience=5)
-
-    callbacks = [early_stopping_callback, model_checkpoint_callback]
+    callbacks = [model_checkpoint_callback]
 
     # =========
     # SET UP TRAINING
@@ -117,21 +84,12 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     train_steps_per_epoch = int(path_train_npy.pop(0))
     train_steps_per_epoch = math.ceil(train_steps_per_epoch / batch_size)
 
-    with open(Path(data_root) / 'val.txt', 'r') as f:
-        path_val_npy = f.readlines()
-    val_steps_per_epoch = int(path_val_npy.pop(0))
-    val_steps_per_epoch = math.ceil(val_steps_per_epoch / batch_size)
-
     output_types = (tf.float16, tf.int8)
     output_shapes = (tf.TensorShape(input_shape), tf.TensorShape([1]))
     dataset_train = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
                                                    args=[path_train_npy, str(dict_label_int)],
                                                    output_types=output_types,
                                                    output_shapes=output_shapes).batch(batch_size=batch_size)
-    dataset_val = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
-                                                 args=[path_val_npy, str(dict_label_int)],
-                                                 output_types=output_types,
-                                                 output_shapes=output_shapes).batch(batch_size=batch_size)
 
     # =========
     # TRAINING
@@ -140,9 +98,8 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     history = model.fit(x=dataset_train,
                         callbacks=callbacks,
                         steps_per_epoch=train_steps_per_epoch,
-                        validation_data=dataset_val,
-                        validation_steps=val_steps_per_epoch,
-                        epochs=epochs)
+                        epochs=epochs,)
+                        # class_weight={0: 2, 1: 1})
     dur = time() - start
 
     # =========
@@ -150,14 +107,12 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     # =========
     num_epochs = len(history.epoch)
     acc = history.history['accuracy'][-1]
-    val_acc = history.history['val_accuracy'][-1]
     write_str = f'{path_data_root}\n' \
                 f'{dict_label_int}\n' \
                 f'{dur} seconds\n' \
                 f'{batch_size} batch size\n' \
                 f'{num_epochs} epochs\n' \
                 f'{acc * 100}% accuracy\n' \
-                f'{val_acc * 100}% validation accuracyn\n' \
                 f'=========\n'
 
     with open(str(folder / 'log.txt'), 'w') as file:  # Save training description

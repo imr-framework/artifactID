@@ -9,7 +9,8 @@ from artifactID.common import data_ops
 
 
 def main(path_read_data: Path, path_save_data: Path, slice_size: int):
-    arr_wrap_range = [15, 20, 25, 30, 35]
+    # arr_wrap_range = [15, 20, 25, 30, 35]
+    arr_wrap_range = [35]
 
     # =========
     # PATHS
@@ -28,19 +29,19 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     # =========
     # DATAGEN
     # =========
-    for ind, path_t1 in tqdm(enumerate(arr_path_read)):
+    for ind, path_t1 in tqdm(enumerate(arr_path_read[:1])):
         vol = data_ops.load_nifti_vol(path_t1)
-        vol_resized = data_ops.resize(vol, size=slice_size)
+        vol_resized = data_ops.resize_vol(vol, size=slice_size)
 
         wrap = arr_wrap_range[ind]
         opacity = 0.5
         direction = random.choice(['v', 'h', 'sl'])  # vertical, horizontal, slice
 
-        nonzero_idx = np.nonzero(vol)
+        nonzero_idx = np.nonzero(vol_resized)
         # Extract regions and construct overlap
         if direction == 'v':
             first, last = nonzero_idx[0].min(), nonzero_idx[0].max()
-            vol_cropped = vol[first:last]
+            vol_cropped = vol_resized[first:last]
             top, middle, bottom = vol_cropped[:wrap], vol_cropped[wrap:-wrap], vol_cropped[-wrap:]
             middle[:wrap] += bottom * opacity
             middle[-wrap:] += top * opacity
@@ -51,7 +52,7 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
 
         elif direction == 'h':
             first, last = nonzero_idx[1].min(), nonzero_idx[1].max()
-            vol_cropped = vol[:, first:last]
+            vol_cropped = vol_resized[:, first:last]
             left, middle, right = vol_cropped[:, :wrap], vol_cropped[:, wrap:-wrap], vol_cropped[:, -wrap:]
             middle[:, -wrap:] += left * opacity
             middle[:, :wrap] += right * opacity
@@ -62,7 +63,7 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
 
         elif direction == 'sl':
             first, last = nonzero_idx[1].min(), nonzero_idx[1].max()
-            vol_cropped = vol[:, :, first:last]
+            vol_cropped = vol_resized[:, :, first:last]
             bottom_sl = vol_cropped[:, :, 1:wrap + 1]
             opacity = 0.2 * np.linspace(1, 0.1, wrap)
             # Now extract the overlapping regions
@@ -72,6 +73,11 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
         # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
         vol_wrapped = vol_wrapped.astype(np.float16)
         vol_wrapped_normalized = data_ops.normalize_slices(vol=vol_wrapped)
+
+        from matplotlib import pyplot as plt
+        plt.imshow(vol_wrapped_normalized[..., 150].astype(np.float), cmap='gray')
+        plt.axis('off')
+        plt.show()
 
         # Save to disk
         _path_save = path_save_data.joinpath(f'wrap{wrap}')

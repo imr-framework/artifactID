@@ -19,71 +19,65 @@ if len(gpus) > 0:
         tf.config.experimental.set_memory_growth(g, True)
 
 
-def main(arr_files, batch_size, format, path_pretrained_model, patch_size):
+def main(arr_npy, batch_size, path_pretrained_model, arr_labels=None):
     path_model_load = path_pretrained_model / 'model.hdf5'  # Keras model
     print('Loading model...')
     model = load_model(str(path_model_load))  # Load model
-    layers = model.layers[2:]
 
-    # Make generator for feeding data to the model
-    def __generator_patches(patches: list):
-        for p in patches:
-            p = p.astype(np.float16)
-            p = np.expand_dims(a=p, axis=2)
-            yield {'input_1': p, 'input_2': p}
+    output_layers = [l.output for l in model.layers]
+    lambda_filter_layer = lambda layer: 'conv2d' in layer.name  # or 'max_pooling2d' in layer.name
+    output_layers = list(filter(lambda_filter_layer, output_layers))  # Remove non-CNN layers
 
-    for counter, vol in enumerate(data_ops.generator_inference(x=arr_files, file_format=format)):
-        vol = data_ops.patch_size_compatible_zeropad(vol=vol, patch_size=patch_size)
-        patches, patch_map = data_ops.get_patches_per_slice(vol=vol, patch_size=patch_size)
-        patches = data_ops.normalize_patches(patches=patches)
+    viz_model = Model(inputs=model.input, outputs=output_layers)
 
-        # for counter2, p in enumerate(patches):
-        #     print(counter2)
-        #     save_path = Path(r"")
-        #     file_name = save_path / f'patch_{counter2}.npy'
-        #     np.save(file=file_name, arr=p)
+    # Make dataset from generator
+    dataset = tf.data.Dataset.from_tensor_slices(arr_npy).batch(batch_size=batch_size)
+    y_pred = model.predict(dataset)
+    y_pred = np.argmax(y_pred, axis=-1)
+    print(f'Pred {np.round(y_pred)}')
+    if arr_labels is not None:
+        print(f'Labels {arr_labels}')
 
-        input_output_shape = (patch_size, patch_size, 1)
-        output_types = ({'input_1': tf.float16,
-                         'input_2': tf.float16})
-        output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
-                          'input_2': tf.TensorShape(input_output_shape)})
+    # TWO-SPLIT, 2 SLICES, 7 FILTERS EACH
+    arr_preds = []
+    for sli in arr_npy:
+        sli = np.expand_dims(sli, axis=0)
+        row = [sli]
+        row.extend(viz_model.predict(sli))
+        arr_preds.append(row)
 
-        # Make dataset from generator
-        dataset = tf.data.Dataset.from_generator(generator=__generator_patches,
-                                                 args=[patches],
-                                                 output_types=output_types,
-                                                 output_shapes=output_shapes).batch(batch_size=batch_size)
+    layer = 0  # Layer to viz
+    cols = 5  # Number of columns
+    num_filters = arr_preds[0][layer + 1].shape[-1]
+    filter_counter = 0
 
-        func_filter_layer = lambda layer: 'conv2d' in layer.name or 'max_pooling2d' in layer.name
-        layers = list(filter(func_filter_layer, layers))  # Remove non-CNN layers
+    for _ in range(num_filters):  # Loop over each filter in layer
+        fig, ax = plt.subplots(len(arr_npy), cols)
+        for i in range(len(arr_npy)):  # Viz `cols` - 1 number of filters for each vol in `arr_npy`
+            row = arr_preds[i]
 
-        random_int = np.random.randint(low=0, high=len(patches))
-        random_patch = patches[random_int]
+            sli = row[0]
+            sli = np.squeeze(sli)
+            ax[i, 0].imshow(sli, cmap='gray')
+            ax[i, 0].axis('off')
 
-        for l in layers:
-            # Construct temp model and perform inference
-            temp_model = Model(inputs=model.input, outputs=l.output)
-            y_pred = temp_model.predict(x=dataset)
-            pred = y_pred[random_int]
+            if arr_labels is not None:
+                ax[i, 0].title.set_text(f'gt {arr_labels[i]} pred {y_pred[i]}')
 
-            num_filters = l.output_shape[-1]
-            if num_filters == 32:
-                num_subplots = (5, 7)
-            elif num_filters == 16:
-                num_subplots = (4, 5)
-            elif num_filters == 8:
-                num_subplots = (3, 3)
+            for j in range(1, cols):
+                pred = row[1:][layer][..., j]
+                pred = np.squeeze(pred)
+                ax[i, j].imshow(pred.astype(np.float), cmap='gray', vmax=0.1)
+                ax[i, j].axis('off')
+                filter_counter += 1
+            filter_counter -= cols - 1
+        filter_counter += cols - 1
 
-            fig, ax = plt.subplots(*num_subplots)
-            ax = ax.ravel()
-            ax[0].imshow(random_patch.astype(np.float), cmap='gray')
-            for j in range(y_pred.shape[-1]):
-                ax[j + 1].imshow(pred[:, :, j].astype(np.float), cmap='gray')
-                ax[j + 1].axis('off')
-            plt.suptitle(l.name)
-            plt.tight_layout()
-            plt.show()
+        plt.tight_layout()
+        # plt.savefig(f'{filter_counter}.jpg')
+        plt.show()
+        # plt.pause(5)
+        # plt.draw()
 
 
 if __name__ == '__main__':
@@ -97,7 +91,7 @@ if __name__ == '__main__':
 
     config_test = config['TEST']
     batch_size = int(config_test['batch_size'])
-    patch_size = int(config_test['patch_size'])  # Patch size
+    input_shape = int(config_test['input_shape'])
     path_pretrained_model = config_test['path_pretrained_model']
     path_read_data = config_test['path_read_data']
 
@@ -111,17 +105,27 @@ if __name__ == '__main__':
     if not path_pretrained_model.exists():
         raise Exception(f'{path_pretrained_model} does not exist')
 
-    arr_files = data_ops.glob_nifti(path=path_read_data)
-    format = 'nifti'
-    if len(arr_files) == 0:
-        arr_files = data_ops.glob_dicom(path=path_read_data)
-        format = 'dicom'
-    if len(arr_files) == 0:
-        raise ValueError(f'No NIFTI or DICOM files found at {path_read_data}')
+    arr_npy = []
+    arr_labels = []
+    for f in path_read_data.glob('**\*.npy'):
+        if 'TP' in str(f.stem):
+            arr_labels.append(1)
+        elif 'FP' in str(f.stem):
+            arr_labels.append(0)
+        elif 'TN' in str(f.stem):
+            arr_labels.append(0)
+        elif 'FN' in str(f.stem):
+            arr_labels.append(1)
+        sli = np.load(str(f))
+        if sli.shape != (input_shape, input_shape):
+            sli = data_ops.resize(sli, size=input_shape)
+        kspace = np.fft.fftshift(np.fft.fftn(sli))
+        sli = np.abs(kspace)
+        arr_npy.append(sli)
+    arr_npy = np.stack(arr_npy, axis=-1)
+    arr_npy = np.moveaxis(arr_npy, (0, 1, 2), (1, 2, 0))
+    arr_npy = np.expand_dims(arr_npy, 3)
+    arr_npy = arr_npy.astype(np.float)
 
     # Perform inference
-    main(arr_files=arr_files,
-         batch_size=batch_size,
-         format=format,
-         path_pretrained_model=path_pretrained_model,
-         patch_size=patch_size)
+    main(arr_npy=arr_npy, arr_labels=arr_labels, batch_size=batch_size, path_pretrained_model=path_pretrained_model)

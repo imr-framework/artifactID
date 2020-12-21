@@ -21,9 +21,9 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     # =========
     # DATAGEN
     # =========
-    for path_t1 in tqdm(arr_path_read):
+    for path_t1 in tqdm(arr_path_read[:75]):
         vol = data_ops.load_nifti_vol(path_t1)
-        vol_resized = data_ops.resize(vol, size=slice_size)
+        vol_resized = data_ops.resize_vol(vol, size=slice_size)
         # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
         vol_resized = vol_resized.astype(np.float16)
         vol_normalized = data_ops.normalize_slices(vol_resized)

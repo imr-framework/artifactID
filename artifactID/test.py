@@ -66,7 +66,7 @@ def __show_heatmap(film_vol: np.ndarray, film_mask: np.ndarray, film_alpha: np.n
 
 
 def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_model: Path, path_read_data: Path,
-         patch_size: int, save: bool, viz: bool = True):
+         input_shape: int, save: bool, viz: bool = True):
     # =========
     # SET UP TESTING
     # =========
@@ -93,23 +93,19 @@ def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_mo
     # =========
     print(f'Performing inference...')
     dict_path_pred = dict()
-    input_output_shape = (patch_size, patch_size, 1)
-    output_types = ({'input_1': tf.float16,
-                     'input_2': tf.float16})
-    output_shapes = ({'input_1': tf.TensorShape(input_output_shape),
-                      'input_2': tf.TensorShape(input_output_shape)})
+    input_output_shape = (input_shape, input_shape, 1)
+    output_types = (tf.float16)
+    output_shapes = (tf.TensorShape(input_output_shape))
     for counter, vol in enumerate(data_ops.generator_inference(x=arr_files, file_format=format)):
         print(arr_files[counter])
-        vol = data_ops.patch_size_compatible_zeropad(vol=vol, patch_size=patch_size)
-        patches, patch_map = data_ops.get_patches_per_slice(vol=vol, patch_size=patch_size)
-        patches = data_ops.normalize_patches(patches=patches)
+        vol = data_ops.resize(vol=vol, size=input_shape)
+        vol_normalized = data_ops.normalize_slices(vol)
+        vol_reshaped = np.moveaxis(vol_normalized, (0, 1, 2), (1, 2, 0))
+        vol_reshaped = np.expand_dims(vol_reshaped, 3)
         folder = arr_files[counter].parent.parts[-1]  # To make a dictionary of files/folders-predictions
 
         # Make dataset from generator
-        dataset = tf.data.Dataset.from_generator(generator=__generator_patches,
-                                                 args=[patches],
-                                                 output_types=output_types,
-                                                 output_shapes=output_shapes).batch(batch_size=batch_size)
+        dataset = tf.data.Dataset.from_tensor_slices(vol_reshaped).batch(batch_size=batch_size)
 
         # Inference
         y_pred = model.predict(x=dataset)
@@ -122,6 +118,7 @@ def main(arr_files: List[Path], batch_size: int, format: str, path_pretrained_mo
         # =========
         # SAVE TO DISK AND/OR VIZ. PREDICTIONS
         # =========
+        sass.scroll(vol_normalized, labels=[np.squeeze(y_pred)])
         if save or viz:
             results = __make_heatmap(patch_map=patch_map, patch_size=patch_size, vol=vol, y_pred=y_pred)
             film_vol, film_mask, film_alpha = results
@@ -161,7 +158,7 @@ if __name__ == '__main__':
 
     config_test = config['TEST']
     batch_size = int(config_test['batch_size'])
-    patch_size = int(config_test['patch_size'])  # Patch size
+    input_shape = int(config_test['input_shape'])  # Patch size
     path_pretrained_model = config_test['path_pretrained_model']
     path_read_data = config_test['path_read_data']
     save = bool(config_test['save'])
@@ -188,8 +185,8 @@ if __name__ == '__main__':
     main(arr_files=arr_files,
          batch_size=batch_size,
          format=format,
+         input_shape=input_shape,
          path_read_data=path_read_data,
          path_pretrained_model=path_pretrained_model,
-         patch_size=patch_size,
          save=save,
          viz=True)
