@@ -291,3 +291,27 @@ def patch_size_compatible_zeropad(vol: np.ndarray, patch_size: int):
 
 def resize(sli: np.ndarray, size: int):
     return cv2.resize(sli.astype(np.float), (size, size))
+
+def resize_vol(vol: np.ndarray, size: int):
+    vol_resized = []
+    for i in range(vol.shape[-1]):
+        _slice = vol[..., i]
+        vol_resized.append(cv2.resize(_slice.astype(np.float), (size, size)))
+    vol_resized = np.stack(vol_resized)
+    vol_resized = np.moveaxis(vol_resized, (0, 1, 2), (2, 0, 1))
+    return vol_resized
+
+def vol_slice_pad(vol: np.ndarray, dim_2_pad: int):
+    if dim_2_pad == 0:
+        target_N = vol.shape[1]
+    else:
+        target_N = vol.shape[0]
+    pad = target_N - vol.shape[dim_2_pad]
+    pad1, pad2 = math.ceil(pad/2), int(pad/2)
+
+    if dim_2_pad == 0:
+        vol_padded = np.vstack((np.zeros((pad1, vol.shape[1], vol.shape[2])), vol, np.zeros((pad2, vol.shape[1], vol.shape[2]))))
+    else:
+        vol_padded = np.hstack((np.zeros((vol.shape[0], pad1, vol.shape[2])), vol, np.zeros((vol.shape[0], pad2, vol.shape[2]))))
+
+    return vol_padded

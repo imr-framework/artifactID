@@ -9,8 +9,8 @@ from artifactID.common import data_ops
 
 
 def main(path_read_data: Path, path_save_data: Path, slice_size: int):
-    # arr_wrap_range = [15, 20, 25, 30, 35]
-    arr_wrap_range = [35]
+    arr_wrap_range = [15, 20, 25, 30, 35]
+
 
     # =========
     # PATHS
@@ -29,13 +29,13 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     # =========
     # DATAGEN
     # =========
-    for ind, path_t1 in tqdm(enumerate(arr_path_read[:1])):
+    for ind, path_t1 in tqdm(enumerate(arr_path_read)):
         vol = data_ops.load_nifti_vol(path_t1)
         vol_resized = data_ops.resize_vol(vol, size=slice_size)
 
         wrap = arr_wrap_range[ind]
-        opacity = 0.5
-        direction = random.choice(['v', 'h', 'sl'])  # vertical, horizontal, slice
+        opacity = 0.75
+        direction = random.choice(['v', 'h'])  # vertical, horizontal
 
         nonzero_idx = np.nonzero(vol_resized)
         # Extract regions and construct overlap
@@ -43,41 +43,41 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
             first, last = nonzero_idx[0].min(), nonzero_idx[0].max()
             vol_cropped = vol_resized[first:last]
             top, middle, bottom = vol_cropped[:wrap], vol_cropped[wrap:-wrap], vol_cropped[-wrap:]
+
+            top_nonzero_idx = np.nonzero(top)
+            bottom_nonzero_idx = np.nonzero(bottom)
+            sl_min = min(top_nonzero_idx[-1].min(), bottom_nonzero_idx[-1].min())
+            sl_max = max(top_nonzero_idx[-1].max(), bottom_nonzero_idx[-1].max())
+            top, middle, bottom = top[..., sl_min:sl_max + 1], middle[..., sl_min:sl_max + 1], bottom[...,sl_min:sl_max + 1]
+
             middle[:wrap] += bottom * opacity
             middle[-wrap:] += top * opacity
             # Now extract the overlapping regions
             # This is because the central unmodified region should not be classified as FOV wrap-around artifact
             #wrap1, wrap2 = middle[:wrap], middle[-wrap:]
-            vol_wrapped = middle
+            vol_wrapped = data_ops.vol_slice_pad(middle, 0)
 
         elif direction == 'h':
             first, last = nonzero_idx[1].min(), nonzero_idx[1].max()
             vol_cropped = vol_resized[:, first:last]
             left, middle, right = vol_cropped[:, :wrap], vol_cropped[:, wrap:-wrap], vol_cropped[:, -wrap:]
+
+            left_nonzero_idx = np.nonzero(left)
+            right_nonzero_idx = np.nonzero(right)
+            sl_min = min(left_nonzero_idx[-1].min(), right_nonzero_idx[-1].min())
+            sl_max = max(left_nonzero_idx[-1].max(), right_nonzero_idx[-1].max())
+            left, middle, right = left[..., sl_min:sl_max + 1], middle[..., sl_min:sl_max + 1], right[...,sl_min:sl_max + 1]
+
             middle[:, -wrap:] += left * opacity
             middle[:, :wrap] += right * opacity
             # Now extract the overlapping regions
             # This is because the central unmodified region should not be classified as FOV wrap-around artifact
             #wrap1, wrap2 = middle[:, :wrap], middle[:, -wrap:]
-            vol_wrapped = middle
-
-        elif direction == 'sl':
-            first, last = nonzero_idx[1].min(), nonzero_idx[1].max()
-            vol_cropped = vol_resized[:, :, first:last]
-            bottom_sl = vol_cropped[:, :, 1:wrap + 1]
-            opacity = 0.2 * np.linspace(1, 0.1, wrap)
-            # Now extract the overlapping regions
-            # This is because the central unmodified region should not be classified as FOV wrap-around artifact
-            vol_wrapped = vol_cropped[:, :, -wrap:] + np.flip(bottom_sl * opacity, axis=2)
+            vol_wrapped = data_ops.vol_slice_pad(middle, 1)
 
         # Convert to float16 to avoid dividing by 0 during normalization - very low max values get zeroed out
         vol_wrapped = vol_wrapped.astype(np.float16)
         vol_wrapped_normalized = data_ops.normalize_slices(vol=vol_wrapped)
-
-        from matplotlib import pyplot as plt
-        plt.imshow(vol_wrapped_normalized[..., 150].astype(np.float), cmap='gray')
-        plt.axis('off')
-        plt.show()
 
         # Save to disk
         _path_save = path_save_data.joinpath(f'wrap{wrap}')

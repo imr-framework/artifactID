@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 path_search = str(Path(__file__).parent.parent)  # To allow ORC to be discoverable
 sys.path.insert(0, path_search)
-# from artifactID.datagen import fov_wrap_datagen, offres_datagen, noartifact_datagen, rigidmotion_datagen, snr_datagen, \
+from artifactID.datagen import fov_wrap_datagen, fov_wrap_datagen_z # offres_datagen, noartifact_datagen, rigidmotion_datagen, snr_datagen, \
 #     gibbs_datagen, nonrigidmotion_datagen, b0cartesian_datagen
 from artifactID.datagen import noartifact_datagen_godwin, gibbs_datagen_godwin, gibbs_datagen
 
@@ -29,8 +29,10 @@ validation_split = float(config_data['validation_split'])
 # noartifact_datagen_godwin.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
 
 # Ghosting datagen
-# print('FOV wrap-around datagen...')
-# fov_wrap_datagen.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
+print('FOV wrap-around datagen (horizontal and vertical)...')
+fov_wrap_datagen.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
+print('FOV wrap-around datagen (slice direction)...')
+fov_wrap_datagen_z.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
 
 # Off-resonance datagen
 # print('\nOff-resonance datagen...')
@@ -46,7 +48,7 @@ validation_split = float(config_data['validation_split'])
 # rigidmotion_datagen.main(path_read_data=path_read_data, path_save_data=path_save_data, patch_size=patch_size)
 
 # Gibbs datagen
-# print('\nGibbs datagen...')
+print('\nGibbs datagen...')
 gibbs_datagen.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
 # gibbs_datagen_godwin.main(arr_path_read=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
 
