@@ -26,7 +26,7 @@ def __get_dict_from_log(log: list):
             return line
 
 
-def main(batch_size: int, data_root: Path, path_pretrained_model: Path, input_shape: int):
+def main(batch_size: int, path_root: Path, path_pretrained_model: Path, input_shape: int):
     # =========
     # SET UP TESTING
     # =========
@@ -39,7 +39,7 @@ def main(batch_size: int, data_root: Path, path_pretrained_model: Path, input_sh
     # =========
     print(f'Performing inference...')
 
-    with open(data_root / 'val.txt', 'r') as f:
+    with open(path_root / 'test.txt', 'r') as f:
         path_eval_npy = f.readlines()
     path_eval_npy.pop(0)
 
@@ -56,8 +56,8 @@ def main(batch_size: int, data_root: Path, path_pretrained_model: Path, input_sh
     input_shape = (input_shape, input_shape, 1)
     output_types = (tf.float16)
     output_shapes = (tf.TensorShape(input_shape))
-    dataset_eval = tf.data.Dataset.from_generator(generator=data_ops.generator_inference,
-                                                  args=[path_eval_npy],
+    dataset_eval = tf.data.Dataset.from_generator(generator=data_ops.generator_train_eval,
+                                                  args=[path_eval_npy, 'eval'],
                                                   output_types=output_types,
                                                   output_shapes=output_shapes).batch(batch_size=batch_size)
 
@@ -80,15 +80,15 @@ def main(batch_size: int, data_root: Path, path_pretrained_model: Path, input_sh
     pred_class1 = np.where(y_pred == 1)[0]
     labels_class0 = np.where(arr_labels == 0)[0]
     labels_class1 = np.where(arr_labels == 1)[0]
-    tp = np.intersect1d(labels_class1, pred_class1)[:3]
-    tn = np.intersect1d(labels_class0, pred_class0)[:3]
-    fn = np.intersect1d(labels_class1, pred_class0)[:3]
-    # fp = np.intersect1d(labels_class0, pred_class1)[0]
+    tp = np.intersect1d(labels_class1, pred_class1)[:10]
+    tn = np.intersect1d(labels_class0, pred_class0)[:10]
+    fn = np.intersect1d(labels_class1, pred_class0)
+    fp = np.intersect1d(labels_class0, pred_class1)
     path_eval_npy = np.array(path_eval_npy)
     print(f'TP - {path_eval_npy[tp]}')
     print(f'TN - {path_eval_npy[tn]}')
     print(f'FN - {path_eval_npy[fn]}')
-    # print(f'FP - {path_eval_npy[fp]}')
+    print(f'FP - {path_eval_npy[fp]}')
 
     # =========
     # Precision, recall and AUC
@@ -100,7 +100,7 @@ def main(batch_size: int, data_root: Path, path_pretrained_model: Path, input_sh
 
     # Confusion matrix
     cm = confusion_matrix(y_true=arr_labels, y_pred=y_pred, normalize='true')
-    # np.save(arr=cm, file='godwin_cm_test.npy')
+    # np.save(arr=cm, file='cm.npy')
     print(cm)
 
     # Plot confusion matrix
@@ -143,6 +143,6 @@ if __name__ == '__main__':
 
     # Perform inference
     main(batch_size=batch_size,
-         data_root=path_read_data,
+         path_root=path_read_data,
          input_shape=input_shape,
          path_pretrained_model=path_pretrained_model)

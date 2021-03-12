@@ -26,15 +26,10 @@ if len(gpus) > 0:
     for g in gpus:
         tf.config.experimental.set_memory_growth(g, True)
 
-# Mixed precision policy to handle float16 data during training
-# policy = mixed_precision.Policy('mixed_float16')
-# mixed_precision.set_policy(policy)
-"""DOES NOT WORK WITH L1 REGULARIZERS"""
-
 
 def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_training: str):
     # Make save destination
-    time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when starting training
+    time_string = datetime.now().strftime('%Y%m%d_%H%M')  # Time stamp when starting training
     folder = Path('output') / f'{time_string}'
     if not folder.exists():  # Make output/* directory
         folder.mkdir(parents=True)
@@ -57,9 +52,9 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
         model.add(Conv2D(288, (3, 3), activation='relu'))
 
         model.add(Flatten())
-        model.add(Dense(128, activation='relu', kernel_regularizer='l1'))
-        model.add(Dense(96, activation='relu', kernel_regularizer='l1'))
-        model.add(Dense(16, activation='relu', kernel_regularizer='l1'))
+        model.add(Dense(128, activation='relu'))
+        model.add(Dense(96, activation='relu'))
+        model.add(Dense(16, activation='relu'))
         model.add(Dense(2))
 
         model.compile(optimizer=Adam(),
@@ -80,16 +75,25 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     # SET UP TRAINING
     # =========
     with open(Path(data_root) / 'train.txt', 'r') as f:
-        path_train_npy = f.readlines()
-    train_steps_per_epoch = int(path_train_npy.pop(0))
-    train_steps_per_epoch = math.ceil(train_steps_per_epoch / batch_size)
+        arr_path_train = f.readlines()
+        train_steps_per_epoch = int(arr_path_train.pop(0))  # First line indicates number of files
+        train_steps_per_epoch = math.ceil(train_steps_per_epoch / batch_size)
+    with open(Path(data_root) / 'val.txt', 'r') as f:
+        arr_path_val = f.readlines()
+        val_steps_per_epoch = int(arr_path_val.pop(0))  # First line indicates number of files
+        val_steps_per_epoch = math.ceil(val_steps_per_epoch / batch_size)
 
     output_types = (tf.float16, tf.int8)
     output_shapes = (tf.TensorShape(input_shape), tf.TensorShape([1]))
-    dataset_train = tf.data.Dataset.from_generator(generator=data_ops.generator_train,
-                                                   args=[path_train_npy, str(dict_label_int)],
+
+    dataset_train = tf.data.Dataset.from_generator(generator=data_ops.generator_train_eval,
+                                                   args=[arr_path_train],
                                                    output_types=output_types,
                                                    output_shapes=output_shapes).batch(batch_size=batch_size)
+    dataset_val = tf.data.Dataset.from_generator(generator=data_ops.generator_train_eval,
+                                                 args=[arr_path_val],
+                                                 output_types=output_types,
+                                                 output_shapes=output_shapes).batch(batch_size=batch_size)
 
     # =========
     # TRAINING
@@ -98,7 +102,9 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     history = model.fit(x=dataset_train,
                         callbacks=callbacks,
                         steps_per_epoch=train_steps_per_epoch,
-                        epochs=epochs,)
+                        validation_data=dataset_val,
+                        validation_steps=val_steps_per_epoch,
+                        epochs=epochs)
                         # class_weight={0: 2, 1: 1})
     dur = time() - start
 
@@ -107,12 +113,14 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     # =========
     num_epochs = len(history.epoch)
     acc = history.history['accuracy'][-1]
+    val_acc= history.history['val_accuracy'][-1]
     write_str = f'{path_data_root}\n' \
                 f'{dict_label_int}\n' \
                 f'{dur} seconds\n' \
                 f'{batch_size} batch size\n' \
                 f'{num_epochs} epochs\n' \
                 f'{acc * 100}% accuracy\n' \
+                f'{val_acc * 100}% validation accuracy\n' \
                 f'=========\n'
 
     with open(str(folder / 'log.txt'), 'w') as file:  # Save training description
@@ -132,7 +140,7 @@ def main(batch_size: int, data_root: str, epochs: int, input_shape: int, resume_
     if resume_training is None:  # New training
         model.save(str(folder / 'model.hdf5'))  # Save model
     else:  # Resumed training
-        time_string = datetime.now().strftime('%y%m%d_%H%M')  # Time stamp when saving re-trained model
+        time_string = datetime.now().strftime('%Y%m%d_%H%M')  # Time stamp when saving re-trained model
         model.save(str(folder / f'model_{time_string}.hdf5'))  # Save re-trained model
 
     with open(str(folder / 'history'), 'wb') as pkl:  # Save history
@@ -157,8 +165,7 @@ if __name__ == '__main__':
         resume_training = None
     elif not Path(resume_training).exists():
         raise Exception(
-            f'{resume_training} does not exist. If you do not want to resume training on a pre-trained model,'
-            f'leave the parameter empty.')
+            f'{resume_training} does not exist. If you are starting a new training session, leave the parameter empty.')
     main(batch_size=batch_size,
          data_root=path_data_root,
          epochs=epochs,
