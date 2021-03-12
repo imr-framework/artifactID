@@ -4,43 +4,38 @@ import pickle
 from matplotlib import pyplot as plt
 
 
-def main(path_history: str):
+def main(path_pickle: str):
     """
-    Plot training accuracy, validation accuracy and loss versus epochs in separate windows.
+    Plot training accuracy, validation accuracy and loss versus epochs.
 
     Parameters
     ==========
-    path_history : str
-        Path to pickle containing training history.
+    path_pickle : str
+        Path to training history pickle.
     """
-    with open(path_history, 'rb') as pkl:  # Read history pickle
+    with open(path_pickle, 'rb') as pkl:  # Read training history pickle
         history = pickle.load(pkl)
 
     # Plot
     plt.figure()
     loss = history['loss']
     plt.plot(range(1, len(loss) + 1), loss)
-    plt.plot(range(1, len(loss) + 1), loss, '.')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Loss vs epochs')
+    plt.grid()
 
     plt.figure()
-    loss = history['accuracy']
-    plt.plot(range(1, len(loss) + 1), loss)
-    plt.plot(range(1, len(loss) + 1), loss, '.')
+    acc = history['accuracy']
+    plt.plot(range(1, len(acc) + 1), acc, label='Train')
+    val_acc = history['val_accuracy']
+    plt.plot(range(1, len(val_acc) + 1), val_acc, label='Validation')
     plt.xlabel('Epochs')
-    plt.ylabel('Training accuracy')
-    plt.title('Training accuracy vs epochs')
+    plt.ylabel('Accuracy')
+    plt.title('Training/validation accuracy vs epochs')
 
-    # plt.figure()
-    # loss = history['val_loss']
-    # plt.plot(range(1, len(loss) + 1), loss)
-    # plt.plot(range(1, len(loss) + 1), loss, '.')
-    # plt.xlabel('Epochs')
-    # plt.ylabel('Validation accuracy')
-    # plt.title('Validation accuracy vs epochs')
-
+    plt.legend()
+    plt.grid()
     plt.show()
 
 
@@ -52,4 +47,4 @@ if __name__ == '__main__':
 
     config_plot = config['PLOT HISTORY']
     path_history = config_plot['path_history']
-    main(path_history=path_history)
+    main(path_pickle=path_history)
