@@ -4,7 +4,7 @@ from pathlib import Path
 
 path_search = str(Path(__file__).parent.parent)  # To allow ORC to be discoverable
 sys.path.insert(0, path_search)
-from artifactID.datagen import fov_wrap_datagen, fov_wrap_datagen_z, gibbs_datagen, noartifact_datagen
+from artifactID.datagen import fov_wrap_datagen_xy, fov_wrap_datagen_z, gibbs_datagen, noartifact_datagen
 
 # Read settings.ini configuration file
 path_settings = '../settings.ini'
@@ -25,7 +25,7 @@ noartifact_datagen.main(path_read_data=path_read_data, path_save_data=path_save_
 
 # FOV wrap-around datagen
 print('FOV wrap-around datagen (horizontal and vertical)...')
-fov_wrap_datagen.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
+fov_wrap_datagen_xy.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
 print('FOV wrap-around datagen (slice direction)...')
 fov_wrap_datagen_z.main(path_read_data=path_read_data, path_save_data=path_save_data, slice_size=slice_size)
 
