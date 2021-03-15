@@ -8,7 +8,6 @@ from artifactID.common import data_ops
 
 
 def main(path_read_data: Path, path_save_data: Path, slice_size: int):
-    arr_wrap_range = [5, 10, 15, 20, 25]
 
     # =========
     # PATHS
@@ -18,30 +17,25 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
     else:
         arr_path_read = data_ops.glob_nifti(path=path_read_data)
     path_save_data = Path(path_save_data)
-    subjects_per_class = math.ceil(
-        len(arr_path_read) / len(arr_wrap_range))  # Calculate number of subjects per class
-
-    arr_wrap_range = np.tile(arr_wrap_range, subjects_per_class)
-    np.random.shuffle(arr_wrap_range)
 
     # =========
     # DATAGEN
     # =========
     for ind, path_t1 in tqdm(enumerate(arr_path_read)):
         vol = data_ops.load_nifti_vol(path_t1)
-        vol = data_ops.resize(vol, size=slice_size)
+        vol = data_ops.resize_vol(vol, size=slice_size)
 
-        wrap = arr_wrap_range[ind]
+        wrap = 15
         nonzero_idx = np.nonzero(vol)
 
         first_z, last_z = nonzero_idx[2].min(), nonzero_idx[2].max()
-        while len(np.nonzero(np.round(vol[:,:,first_z],2))[0])/(vol.shape[0]*vol.shape[1])*100 < 10:
-            first_z += 1
+        # Remove noise slices at the top of the head (signal<10%)
         while len(np.nonzero(np.round(vol[:,:,last_z],2))[0])/(vol.shape[0]*vol.shape[1])*100 < 10:
             last_z -= 1
+        # Remove the slices corresponding to the neck level
         vol_cropped_z = vol[:, :, 75:last_z]
         bottom_sl = vol_cropped_z[:, :, 1:wrap + 1]
-        opacity = 0.5 * np.linspace(1, 0.2, wrap)
+        opacity = 0.9 * np.linspace(1, 0.2, wrap)
         # Now extract the overlapping regions
         # This is because the central unmodified region should not be classified as FOV wrap-around artifact
         vol_wrapped_z = vol_cropped_z[:, :, -wrap:] + np.flip(bottom_sl * opacity, axis=2)
@@ -52,7 +46,7 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int):
         vol_wrapped_normalized = data_ops.normalize_slices(vol=vol_wrapped)
 
         # Save to disk
-        _path_save = path_save_data.joinpath(f'wrap_z{wrap}')
+        _path_save = path_save_data.joinpath(f'wrap_z')
         if not _path_save.exists():
             _path_save.mkdir(parents=True)
         for i in range(vol_wrapped_normalized.shape[-1]):
