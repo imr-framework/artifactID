@@ -3,9 +3,8 @@ from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-path_datagen = Path(r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\Godwin_datagen_slices")
-path_lowfield = Path(
-    r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\Godwin_Gibbs_NonGibbs_slices_npy")
+path_datagen = Path(r"")
+path_lowfield = Path(r"")
 path_save_txt = r""
 
 # Gather files
