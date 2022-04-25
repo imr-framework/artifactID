@@ -70,6 +70,6 @@ def main(path_npy: str, path_model: str):
 
 
 if __name__ == '__main__':
-    path_model = r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Code\artifactID-MICCAI_2021\artifactID\output\20210301_2022_Gibbs_sim\model.hdf5"
-    path_npy = r"C:\Users\sravan953\Documents\CU\Projects\imr-framework\ArtifactID\Data\Godwin_Gibbs_NonGibbs_slices_npy\gibbs\IMG-0003-00001.npy"
+    path_model = r"20210301_2022_Gibbs_sim\model.hdf5"
+    path_npy = r"gibbs\IMG-0003-00001.npy"
     main(path_npy, path_model)
