@@ -2,4 +2,4 @@ nibabel==3.0.2
 numpy==1.18.3
 opencv-python==4.2.0.34
 pynufft==2020.0.0
-scipy==1.4.1
+scipy==1.10.0
