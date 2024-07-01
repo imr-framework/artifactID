@@ -5,14 +5,13 @@ import numpy as np
 from tqdm import tqdm
 
 from artifactID.datagen.utils import glob_nifti
-from common_utils import data_loader, preprocessor, data_utils
+from common_utils import data_loader, preprocessor
 
 
 def cutart(sli: np.ndarray, sli_gibbs: np.ndarray, debug_viz: bool) -> Tuple[np.ndarray, np.ndarray]:
     final_cutart_mask = np.ones_like(sli)  # Composite mask of all CutArt patches
     sli_gibbs_cutart = sli.copy()
-
-    passes = 1  # np.random.randint(low=1, high=4)  # Randomly apply CutArt between 1 and 3 times
+    passes = np.random.randint(low=1, high=4)  # Randomly apply CutArt between 1 and 3 times
     for i in range(passes):
         rerun_gibbs = True  # Flag to rerun CutArt if it fails
         while rerun_gibbs:
@@ -28,7 +27,7 @@ def cutart(sli: np.ndarray, sli_gibbs: np.ndarray, debug_viz: bool) -> Tuple[np.
             crop_low_xy = 32
             crop_high_y = 160
             crop_y = np.random.randint(low=crop_low_xy, high=crop_high_y)
-            crop_high_x = 96 if crop_y > 128 else 64
+            crop_high_x = 96
             crop_x = np.random.randint(low=crop_low_xy, high=crop_high_x)
 
             cutart_mask = np.zeros_like(sli)
@@ -74,7 +73,7 @@ def gibbs(img: np.ndarray) -> np.ndarray:
     # Convert to k-space and crop to simulate Gibbs Ringing
     kspace = np.fft.fftshift(np.fft.fftn(img))
     size = kspace.shape[0]
-    crop = 72  # np.random.randint(low=48, high=72)
+    crop = np.random.randint(low=48, high=72)
     if np.random.randint(low=0, high=2) == 0:
         kspace[:, :crop] = 0
         kspace[:, size - crop:] = 0
@@ -84,23 +83,17 @@ def gibbs(img: np.ndarray) -> np.ndarray:
 
     # Convert to image-space
     img_gibbs = np.abs(np.fft.ifftn(np.fft.ifftshift(kspace)))
-    # img_gibbs = preprocessor.normalize_per_slice(img_gibbs) * img.max()
+    img_gibbs = preprocessor.normalize_per_slice(img_gibbs) * img.max()
     residual = np.abs(img - img_gibbs)
-    scale = 2  # np.random.randint(low=2, high=4)
+    scale = np.random.randint(low=2, high=4)
     img_gibbs += scale * residual
-    # img_gibbs = preprocessor.normalize_per_slice(img_gibbs) * img.max()
-
-    # # Debug - visualize
-    # from matplotlib import pyplot as plt
-    # plt.imshow(img, cmap='gray')
-    # plt.axis('off')
-    # plt.show()
+    img_gibbs = preprocessor.normalize_per_slice(img_gibbs) * img.max()
 
     return img_gibbs
 
 
 def add_noise(img: np.ndarray) -> np.ndarray:
-    var = np.random.uniform(low=1e-4, high=5e-3)
+    var = np.random.uniform(low=1e-6, high=2e-5)
     std = np.sqrt(var)
     mean = 0
     noise = np.random.normal(mean, std, img.shape)
@@ -129,7 +122,7 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int, nifti_data
     # =========
     # DATAGEN
     # =========3
-    for subject, path_nii in enumerate(tqdm(path_nii_files[:10])):
+    for subject, path_nii in enumerate(tqdm(path_nii_files)):
         subject = str(subject + 1)
 
         # Load clean dataset and crop
@@ -138,15 +131,13 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int, nifti_data
             data_format="nifti",
             normalize=True,
             nifti_dataset=nifti_dataset,
-            central_50pc_crop=False,  # We don't crop here since we re-normalize after adding noise later below
+            central_50pc_crop=True,
             target_size=slice_size,
         )
-
-        # Add noise
         for slice_index in range(vol.shape[-1]):
             sli = vol[..., slice_index]
             sli = add_noise(sli)
-            vol[..., slice_index] = sli
+            vol[..., slice_index] = sli  # Replace clean with noisy in original vol
         vol = preprocessor.normalize_volume(vol)
 
         vol_gibbs = []  # Debug
@@ -165,10 +156,7 @@ def main(path_read_data: Path, path_save_data: Path, slice_size: int, nifti_data
             vol_gibbs.append(sli_gibbs_cutart)
 
         vol_gibbs = np.stack(vol_gibbs, axis=-1)
-        vol_gibbs = preprocessor.normalize_volume(vol_gibbs)
-
-        vol = data_utils.crop_central_50pc(vol)  # We crop here since we re-normalize after adding noise
-        vol_gibbs = data_utils.crop_central_50pc(vol_gibbs)  # We crop here since we re-normalize after adding noise
+        vol_gibbs = np.clip(vol_gibbs, a_min=0.0, a_max=1.0)
 
         if save:
             # Save to disk
